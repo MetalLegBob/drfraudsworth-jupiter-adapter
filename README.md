@@ -2,11 +2,14 @@
 
 Jupiter AMM adapter for the Dr. Fraudsworth DEX protocol on Solana. Implements the `jupiter-amm-interface::Amm` trait so Jupiter's routing engine can route swaps through Dr. Fraudsworth's on-chain programs.
 
+This repository contains the standalone adapter crate. The on-chain programs, Anchor IDLs, and the math-parity test suite (SDK quotes proven equal to on-chain outputs) live in the protocol repository: [github.com/MetalLegBob/drfraudsworth](https://github.com/MetalLegBob/drfraudsworth).
+
 **Key properties:**
 
-- Exact quote accuracy (proven by LiteSVM parity tests -- quotes match on-chain output within 1 lamport)
-- Zero network calls in any method (all addresses and hook accounts are hardcoded)
+- Exact quote accuracy — the SDK's math modules are copies of the on-chain math, proven equal by zero-tolerance parity tests in the protocol repository, and validated here against embedded mainnet account data
+- Zero network calls in any method (pool state is parsed from Jupiter-provided account snapshots; all protocol-singleton addresses are hardcoded)
 - Supports all 8 swap directions across 6 Amm instances
+- Generic pool construction: `SolPoolAmm` derives mints, vaults, and orientation from parsed `PoolState` account data, so future SOL-quoted pools construct without SDK changes
 
 ## Pool Types
 
@@ -45,6 +48,17 @@ let all_keys: Vec<Pubkey> = all_pool_keys();
 - `known_sol_pool_keys()` -- Returns 2 SOL pool PDAs. Jupiter fetches account data and calls `SolPoolAmm::from_keyed_account()`.
 - `known_instances()` -- Returns 4 pre-constructed `VaultAmm` instances (fixed-pool protocol, no `getProgramAccounts` needed).
 - `all_pool_keys()` -- Convenience: all 6 instance keys combined.
+
+### Automatic discovery of future pools
+
+`SolPoolAmm::from_keyed_account` is safe to feed arbitrary accounts and constructs generically:
+
+1. Rejects accounts not owned by the AMM program
+2. Rejects data without the `PoolState` Anchor discriminator (`sha256("account:PoolState")[0..8]`)
+3. Rejects pools that are not SOL-quoted or whose token side is not CRIME/FRAUD
+4. Derives mints, vaults, reserves, and orientation entirely from the account bytes
+
+This means the constructor also works with scan-based market discovery (e.g. `getProgramAccounts` on the AMM program filtered by the `PoolState` discriminator): a new SOL-quoted pool created by the protocol would construct with no SDK changes. Note that pool accounts are **owned by the AMM program** while `program_id()` returns the **Tax Program** (the swap entry point) — see Program IDs below.
 
 ## Fee Structure
 
@@ -86,7 +100,7 @@ The `EpochState` PDA is declared in `get_accounts_to_update()`, so Jupiter autom
 
 ## Account Metas
 
-Each instruction type requires a specific set of accounts. The SDK builds these via hardcoded mainnet addresses with zero network calls.
+Each instruction type requires a specific set of accounts. Pool-specific accounts (pool PDA, mints, vaults, orientation) are derived from the parsed `PoolState`; protocol singletons (authorities, staking, treasury, programs) are hardcoded mainnet addresses. Zero network calls.
 
 ### SwapSolBuy (SOL -> CRIME/FRAUD)
 
@@ -143,8 +157,12 @@ for (key, amm) in &vault_instances {
 See `examples/quote_example.rs` for a complete working example:
 
 ```bash
-cargo run --example quote_example -p drfraudsworth-jupiter-adapter
+cargo run --example quote_example
 ```
+
+## Interface Version
+
+The crate declares `jupiter-amm-interface = "0.6"` and the committed `Cargo.lock` pins 0.6.0, matching [jup-ag/rust-amm-implementation](https://github.com/jup-ag/rust-amm-implementation). The library never constructs `QuoteParams`/`SwapParams`, so it compiles unchanged against 0.6.1 as well; note that a fresh resolve of 0.6.1 requires the solana 3.x crate generation (its `solana_account_decoder::encode_ui_account` import does not exist in the 2.x series).
 
 ## Program IDs
 
@@ -154,27 +172,14 @@ Jupiter needs to know which programs are called for each swap type:
 |---------|---------|-----------|
 | Tax Program | `43fZGRtmEsP7ExnJE1dbTbNjaP1ncvVmMPusSeksWGEj` | SOL pool swaps (CPI to AMM internally) |
 | Conversion Vault | `5uawA6ehYTu69Ggvm3LSK84qFawPKxbWgfngwj15NRJ` | Vault conversions |
-| AMM Program | `5JsSAL3kJDUWD4ZveYXYZmgm1eVqueesTZVdAvtZg8cR` | Called via CPI by Tax Program (not directly by Jupiter) |
+| AMM Program | `5JsSAL3kJDUWD4ZveYXYZmgm1eVqueesTZVdAvtZg8cR` | Owns PoolState accounts; called via CPI by Tax Program (not directly by Jupiter) |
 | Transfer Hook | `CiQPQrmQh6BPhb9k7dFnsEs5gKPgdrvNKFc5xie5xVGd` | Called by Token-2022 during transfers |
 | Epoch Program | `4Heqc8QEjJCspHR8y96wgZBnBfbe3Qb8N6JBZMQt9iw2` | Manages epoch state (not called by Jupiter directly) |
 | Staking Program | `12b3t1cNiAUoYLiWFEnFa4w6qYxVAiqCWU7KZuzLPYtH` | Receives staking rewards from tax (not called by Jupiter directly) |
 
-## IDL Locations
+## IDLs
 
-Anchor IDLs are required for Jupiter's integration review:
-
-| IDL File | Program |
-|----------|---------|
-| `target/idl/amm.json` | AMM Program (constant-product swap logic) |
-| `target/idl/tax_program.json` | Tax Program (swap entry point with tax deduction) |
-| `target/idl/conversion_vault.json` | Conversion Vault (fixed-rate token conversion) |
-| `target/idl/transfer_hook.json` | Transfer Hook (whitelist-based transfer validation) |
-| `target/idl/epoch_program.json` | Epoch Program (VRF-based epoch rotation) |
-| `target/idl/staking.json` | Staking Program (PROFIT yield distribution) |
-
-Public repository: [github.com/MetalLegBob/drfraudsworth](https://github.com/MetalLegBob/drfraudsworth)
-
-IDLs are in `target/idl/` in the source repository.
+Anchor IDLs for all six programs are published in the protocol repository: [github.com/MetalLegBob/drfraudsworth](https://github.com/MetalLegBob/drfraudsworth) (`target/idl/*.json`).
 
 ## Token Mints
 
@@ -182,13 +187,13 @@ All three protocol tokens use Token-2022 with transfer hooks:
 
 | Token | Mint Address | Decimals |
 |-------|-------------|----------|
-| CRIME | `cRiMEhAxoDhcEuh3Yf7Z2QkXUXUMKbakhcVqmDsqPXc` | 9 |
-| FRAUD | `FraUdp6YhtVJYPxC2w255yAbpTsPqd8Bfhy9rC56jau5` | 9 |
-| PROFIT | `pRoFiTj36haRD5sG2Neqib9KoSrtdYMGrM7SEkZetfR` | 9 |
+| CRIME | `cRiMEhAxoDhcEuh3Yf7Z2QkXUXUMKbakhcVqmDsqPXc` | 6 |
+| FRAUD | `FraUdp6YhtVJYPxC2w255yAbpTsPqd8Bfhy9rC56jau5` | 6 |
+| PROFIT | `pRoFiTj36haRD5sG2Neqib9KoSrtdYMGrM7SEkZetfR` | 6 |
 
 ## Mainnet Addresses
 
-Full address set is in `deployments/mainnet.json`. Key addresses for Jupiter integration:
+Full address set is in `deployments/mainnet.json` in the protocol repository. Key addresses for Jupiter integration:
 
 | Resource | Address |
 |----------|---------|
@@ -204,21 +209,25 @@ Full address set is in `deployments/mainnet.json`. Key addresses for Jupiter int
 - **Swap variant:** Uses `Swap::TokenSwap` as placeholder. Jupiter assigns the real variant during integration review.
 - **Vault instance keying:** Synthetic PDAs derived from `[b"jup_vault", input_mint, output_mint]` via `Pubkey::find_program_address`. These are not real on-chain accounts -- they exist solely to give each VaultAmm instance a unique key.
 - **`supports_exact_out`:** Returns `false` for all instances. Integer division in vault conversions loses information, and SOL pool exact-out would require iterative solving.
-- **No network calls:** All methods (`quote`, `get_swap_and_account_metas`, `get_accounts_to_update`) use hardcoded addresses. Jupiter handles account fetching externally.
+- **No network calls:** All methods (`quote`, `get_swap_and_account_metas`, `get_accounts_to_update`) operate on Jupiter-provided account snapshots and constants. Jupiter handles account fetching externally.
 - **WSOL wrapping:** Jupiter handles SOL <-> WSOL wrapping/unwrapping. The SDK returns only the Tax Program swap instruction.
 - **`unidirectional()`:** Returns `true` for VaultAmm, `false` (default) for SolPoolAmm. Jupiter uses this to avoid routing backwards through vault instances.
+- **Mint-pair validation:** `quote()` and `get_swap_and_account_metas()` reject requests whose mints do not match the instance's pool.
 
 ## Testing
 
 ```bash
-# Run all unit tests (59 math/state + 46 trait/account tests = 105 total)
-cargo test -p drfraudsworth-jupiter-adapter
+# Full standalone suite: unit tests + construction, edge gauntlet,
+# instruction structure, mainnet-data validation, extended quoting
+cargo test
 
 # Run the quote example
-cargo run --example quote_example -p drfraudsworth-jupiter-adapter
+cargo run --example quote_example
 ```
 
-LiteSVM parity tests deploy the actual on-chain programs, execute swaps, and compare outputs to SDK quotes -- proving exact accuracy within 1 lamport.
+The mainnet-data validation suite parses real (hex-embedded) mainnet account snapshots and includes an equivalence proof that account lists built from parsed on-chain data are byte-identical to the constant-based builders.
+
+Math-parity tests — proving SDK quote math equals on-chain program math with zero tolerance — live in the protocol repository (`sdk/jupiter-adapter/tests/parity_*.rs` there), because they compile against the on-chain program crates directly.
 
 ## License
 

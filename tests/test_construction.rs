@@ -21,16 +21,21 @@ fn amm_context() -> AmmContext {
 }
 
 fn mock_pool_state_bytes(
-    mint_a: &Pubkey,
-    reserve_a: u64,
-    reserve_b: u64,
+    token_mint: &Pubkey,
+    reserve_sol: u64,
+    reserve_token: u64,
     lp_fee_bps: u16,
 ) -> Vec<u8> {
     let mut data = vec![0u8; 224];
+    data[0..8].copy_from_slice(&POOL_STATE_DISCRIMINATOR);
     data[8] = 0; // pool_type
-    data[9..41].copy_from_slice(mint_a.as_ref());
-    data[137..145].copy_from_slice(&reserve_a.to_le_bytes());
-    data[145..153].copy_from_slice(&reserve_b.to_le_bytes());
+    // Mainnet orientation: mint_a = WSOL, mint_b = token
+    data[9..41].copy_from_slice(NATIVE_MINT.as_ref());
+    data[41..73].copy_from_slice(token_mint.as_ref());
+    data[73..105].copy_from_slice(Pubkey::new_unique().as_ref()); // vault_a
+    data[105..137].copy_from_slice(Pubkey::new_unique().as_ref()); // vault_b
+    data[137..145].copy_from_slice(&reserve_sol.to_le_bytes());
+    data[145..153].copy_from_slice(&reserve_token.to_le_bytes());
     data[153..155].copy_from_slice(&lp_fee_bps.to_le_bytes());
     data
 }
@@ -66,7 +71,7 @@ fn build_account_map(entries: Vec<(Pubkey, Vec<u8>, Pubkey)>) -> AccountMap {
 
 #[test]
 fn sol_pool_from_keyed_account_crime() {
-    let pool_data = mock_pool_state_bytes(&NATIVE_MINT, 50_000_000_000, 1_000_000_000_000, 100);
+    let pool_data = mock_pool_state_bytes(&CRIME_MINT, 50_000_000_000, 1_000_000_000_000, 100);
     let keyed = KeyedAccount {
         key: CRIME_SOL_POOL,
         account: Account {
@@ -83,7 +88,7 @@ fn sol_pool_from_keyed_account_crime() {
 
 #[test]
 fn sol_pool_from_keyed_account_fraud() {
-    let pool_data = mock_pool_state_bytes(&NATIVE_MINT, 50_000_000_000, 1_000_000_000_000, 100);
+    let pool_data = mock_pool_state_bytes(&FRAUD_MINT, 50_000_000_000, 1_000_000_000_000, 100);
     let keyed = KeyedAccount {
         key: FRAUD_SOL_POOL,
         account: Account {
@@ -118,7 +123,7 @@ fn sol_pool_from_keyed_account_rejects_short_data() {
 #[test]
 fn full_lifecycle_crime_pool_buy() {
     // 1. Parse from account
-    let pool_data = mock_pool_state_bytes(&NATIVE_MINT, 100_000_000_000, 500_000_000_000, 100);
+    let pool_data = mock_pool_state_bytes(&CRIME_MINT, 100_000_000_000, 500_000_000_000, 100);
     let keyed = KeyedAccount {
         key: CRIME_SOL_POOL,
         account: Account {
@@ -150,7 +155,7 @@ fn full_lifecycle_crime_pool_buy() {
 
 #[test]
 fn full_lifecycle_fraud_pool_sell() {
-    let pool_data = mock_pool_state_bytes(&NATIVE_MINT, 100_000_000_000, 500_000_000_000, 100);
+    let pool_data = mock_pool_state_bytes(&FRAUD_MINT, 100_000_000_000, 500_000_000_000, 100);
     let keyed = KeyedAccount {
         key: FRAUD_SOL_POOL,
         account: Account {
@@ -183,7 +188,7 @@ fn full_lifecycle_fraud_pool_sell() {
 
 #[test]
 fn update_missing_pool_errors() {
-    let pool_data = mock_pool_state_bytes(&NATIVE_MINT, 100_000_000_000, 500_000_000_000, 100);
+    let pool_data = mock_pool_state_bytes(&CRIME_MINT, 100_000_000_000, 500_000_000_000, 100);
     let keyed = KeyedAccount {
         key: CRIME_SOL_POOL,
         account: Account {
@@ -201,7 +206,7 @@ fn update_missing_pool_errors() {
 
 #[test]
 fn update_missing_epoch_errors() {
-    let pool_data = mock_pool_state_bytes(&NATIVE_MINT, 100_000_000_000, 500_000_000_000, 100);
+    let pool_data = mock_pool_state_bytes(&CRIME_MINT, 100_000_000_000, 500_000_000_000, 100);
     let keyed = KeyedAccount {
         key: CRIME_SOL_POOL,
         account: Account {

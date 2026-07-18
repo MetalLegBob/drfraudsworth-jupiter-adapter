@@ -21,3 +21,14 @@ pub const SOL_DECIMALS: u8 = 9;
 ///
 /// Known value (hex): bf 3f 8b ed 90 0c df d2
 pub const EPOCH_STATE_DISCRIMINATOR: [u8; 8] = [0xbf, 0x3f, 0x8b, 0xed, 0x90, 0x0c, 0xdf, 0xd2];
+
+/// Anchor discriminator for PoolState account.
+///
+/// Computed as: sha256("account:PoolState")[0..8]
+///
+/// Verified by state::pool_state::pool_state_discriminator_matches_sha256()
+/// test and against embedded mainnet account data. If the on-chain struct
+/// name changes, this must be updated.
+///
+/// Known value (hex): f7 ed e3 f5 d7 c3 de 46
+pub const POOL_STATE_DISCRIMINATOR: [u8; 8] = [0xf7, 0xed, 0xe3, 0xf5, 0xd7, 0xc3, 0xde, 0x46];

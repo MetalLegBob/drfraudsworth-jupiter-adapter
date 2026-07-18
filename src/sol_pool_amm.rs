@@ -1,7 +1,11 @@
 // Jupiter Amm trait implementation for Dr. Fraudsworth SOL pool swaps.
 //
-// SolPoolAmm handles CRIME/SOL and FRAUD/SOL swaps via the Tax Program.
-// Two instances are created: one per pool.
+// SolPoolAmm handles TOKEN/SOL swaps via the Tax Program. Instances are
+// constructed generically from PoolState account data: mints, vaults, and
+// orientation all come from the parsed account, not per-pool constants.
+// Any SOL-quoted pool the AMM creates in the future (for a supported token)
+// constructs without SDK changes — only genuinely new pool SHAPES (e.g. a
+// USDC quote side, which needs new on-chain tax instructions) require code.
 //
 // Quote flow:
 //   Buy (SOL -> token): tax deducted from SOL INPUT, then AMM swap on post-tax amount
@@ -16,30 +20,28 @@ use rust_decimal::Decimal;
 use solana_sdk::pubkey::Pubkey;
 
 use crate::accounts::addresses::{
-    CRIME_SOL_POOL, EPOCH_STATE_PDA, FRAUD_MINT, FRAUD_SOL_POOL, NATIVE_MINT, CRIME_MINT,
+    AMM_PROGRAM_ID, CRIME_MINT, EPOCH_STATE_PDA, FRAUD_MINT, NATIVE_MINT,
 };
-use crate::accounts::sol_pool_accounts::{build_buy_account_metas, build_sell_account_metas};
+use crate::accounts::sol_pool_accounts::{
+    build_buy_account_metas_generic, build_sell_account_metas_generic, known_pool_state,
+};
 use crate::math::amm_math::{calculate_effective_input, calculate_swap_output};
 use crate::math::tax_math::calculate_tax;
 use crate::state::epoch_state::ParsedEpochState;
 use crate::state::pool_state::ParsedPoolState;
 
-/// Jupiter Amm implementation for CRIME/SOL and FRAUD/SOL pools.
+/// Jupiter Amm implementation for SOL-quoted pools (CRIME/SOL, FRAUD/SOL).
 ///
 /// Swaps go through the Tax Program which deducts dynamic tax and then
 /// CPI-calls the AMM for the actual constant-product swap.
 #[derive(Clone)]
 pub struct SolPoolAmm {
-    /// Pool PDA address (CRIME/SOL or FRAUD/SOL)
+    /// Pool PDA address
     key: Pubkey,
-    /// true = CRIME pool, false = FRAUD pool
-    is_crime: bool,
-    /// SOL reserve (from PoolState)
-    reserve_sol: u64,
-    /// Token reserve (from PoolState)
-    reserve_token: u64,
-    /// LP fee in BPS (100 = 1%)
-    lp_fee_bps: u16,
+    /// Full parsed pool state (mints, vaults, reserves, LP fee)
+    pool: ParsedPoolState,
+    /// The pool's non-SOL mint (CRIME or FRAUD)
+    token_mint: Pubkey,
     /// Current epoch buy tax in BPS
     buy_tax_bps: u16,
     /// Current epoch sell tax in BPS
@@ -51,32 +53,47 @@ impl Amm for SolPoolAmm {
     where
         Self: Sized,
     {
-        // Reject unknown pool accounts up front. Without this, any account fed
-        // by the router would silently be treated as the FRAUD/SOL pool and
-        // produce quotes/instructions for the wrong pool. New pools must be
-        // added here (and to known_sol_pool_keys) explicitly.
-        let is_crime = if keyed_account.key == CRIME_SOL_POOL {
-            true
-        } else if keyed_account.key == FRAUD_SOL_POOL {
-            false
-        } else {
+        // Only accounts owned by the AMM program can be genuine pools. This,
+        // plus the discriminator check inside ParsedPoolState::from_bytes,
+        // makes it safe to feed this constructor arbitrary accounts (e.g.
+        // from a program scan) — non-pools fail loudly instead of being
+        // silently treated as some known pool.
+        if keyed_account.account.owner != AMM_PROGRAM_ID {
             return Err(anyhow!(
-                "SolPoolAmm: unknown pool key {} (expected CRIME/SOL {} or FRAUD/SOL {})",
+                "SolPoolAmm: account {} is owned by {}, not the AMM program {}",
                 keyed_account.key,
-                CRIME_SOL_POOL,
-                FRAUD_SOL_POOL
+                keyed_account.account.owner,
+                AMM_PROGRAM_ID
             ));
-        };
+        }
 
         let pool_state = ParsedPoolState::from_bytes(&keyed_account.account.data)?;
-        let (reserve_sol, reserve_token) = pool_state.sol_and_token_reserves();
+
+        let token_mint = pool_state.token_mint().ok_or_else(|| {
+            anyhow!(
+                "SolPoolAmm: pool {} is not SOL-quoted ({} / {})",
+                keyed_account.key,
+                pool_state.mint_a,
+                pool_state.mint_b
+            )
+        })?;
+
+        // Tax rates, transfer hooks, and the whitelist only exist for the
+        // protocol's faction tokens. Reject pools for any other mint.
+        if token_mint != CRIME_MINT && token_mint != FRAUD_MINT {
+            return Err(anyhow!(
+                "SolPoolAmm: unsupported token mint {} in pool {} (expected CRIME {} or FRAUD {})",
+                token_mint,
+                keyed_account.key,
+                CRIME_MINT,
+                FRAUD_MINT
+            ));
+        }
 
         Ok(Self {
             key: keyed_account.key,
-            is_crime,
-            reserve_sol,
-            reserve_token,
-            lp_fee_bps: pool_state.lp_fee_bps,
+            pool: pool_state,
+            token_mint,
             // Tax rates initialized to 0; populated by first update() call.
             // Jupiter always calls update() before quote().
             buy_tax_bps: 0,
@@ -98,8 +115,7 @@ impl Amm for SolPoolAmm {
     }
 
     fn get_reserve_mints(&self) -> Vec<Pubkey> {
-        let token_mint = if self.is_crime { CRIME_MINT } else { FRAUD_MINT };
-        vec![NATIVE_MINT, token_mint]
+        vec![NATIVE_MINT, self.token_mint]
     }
 
     fn get_accounts_to_update(&self) -> Vec<Pubkey> {
@@ -108,19 +124,26 @@ impl Amm for SolPoolAmm {
     }
 
     fn update(&mut self, account_map: &AccountMap) -> Result<()> {
-        // Parse pool state for reserves + LP fee
+        // Re-parse pool state for reserves + LP fee
         let pool_data = try_get_account_data(account_map, &self.key)?;
         let pool_state = ParsedPoolState::from_bytes(pool_data)?;
-        let (reserve_sol, reserve_token) = pool_state.sol_and_token_reserves();
-        self.reserve_sol = reserve_sol;
-        self.reserve_token = reserve_token;
-        self.lp_fee_bps = pool_state.lp_fee_bps;
+
+        // The pool's mints are immutable on-chain; a change means we were
+        // handed data for a different account.
+        if pool_state.token_mint() != Some(self.token_mint) {
+            return Err(anyhow!(
+                "SolPoolAmm: update data for {} does not match token mint {}",
+                self.key,
+                self.token_mint
+            ));
+        }
+        self.pool = pool_state;
 
         // Parse epoch state for tax rates
         let epoch_data = try_get_account_data(account_map, &EPOCH_STATE_PDA)?;
         let epoch_state = ParsedEpochState::from_bytes(epoch_data)?;
-        self.buy_tax_bps = epoch_state.get_tax_bps(self.is_crime, true);
-        self.sell_tax_bps = epoch_state.get_tax_bps(self.is_crime, false);
+        self.buy_tax_bps = epoch_state.get_tax_bps(self.is_crime(), true);
+        self.sell_tax_bps = epoch_state.get_tax_bps(self.is_crime(), false);
 
         Ok(())
     }
@@ -131,6 +154,7 @@ impl Amm for SolPoolAmm {
         }
 
         let is_buy = quote_params.input_mint == NATIVE_MINT;
+        self.validate_mint_pair(&quote_params.input_mint, &quote_params.output_mint, is_buy)?;
 
         if is_buy {
             self.quote_buy(quote_params.amount)
@@ -141,23 +165,26 @@ impl Amm for SolPoolAmm {
 
     fn get_swap_and_account_metas(&self, swap_params: &SwapParams) -> Result<SwapAndAccountMetas> {
         let is_buy = swap_params.source_mint == NATIVE_MINT;
+        self.validate_mint_pair(&swap_params.source_mint, &swap_params.destination_mint, is_buy)?;
 
         let account_metas = if is_buy {
             // Buy: source = WSOL, destination = token
-            build_buy_account_metas(
+            build_buy_account_metas_generic(
                 &swap_params.token_transfer_authority,
                 &swap_params.source_token_account,
                 &swap_params.destination_token_account,
-                self.is_crime,
-            )
+                &self.key,
+                &self.pool,
+            )?
         } else {
             // Sell: source = token, destination = WSOL
-            build_sell_account_metas(
+            build_sell_account_metas_generic(
                 &swap_params.token_transfer_authority,
                 &swap_params.source_token_account,
                 &swap_params.destination_token_account,
-                self.is_crime,
-            )
+                &self.key,
+                &self.pool,
+            )?
         };
 
         Ok(SwapAndAccountMetas {
@@ -191,18 +218,46 @@ impl SolPoolAmm {
         buy_tax_bps: u16,
         sell_tax_bps: u16,
     ) -> Self {
+        let (key, mut pool) = known_pool_state(is_crime);
+        // known_pool_state has mint_a = WSOL, so reserve_a is the SOL side.
+        pool.reserve_a = reserve_sol;
+        pool.reserve_b = reserve_token;
+        let token_mint = pool.token_mint().expect("known pools are SOL pools");
         Self {
-            key: if is_crime {
-                CRIME_SOL_POOL
-            } else {
-                crate::accounts::addresses::FRAUD_SOL_POOL
-            },
-            is_crime,
-            reserve_sol,
-            reserve_token,
-            lp_fee_bps: crate::constants::LP_FEE_BPS,
+            key,
+            pool,
+            token_mint,
             buy_tax_bps,
             sell_tax_bps,
+        }
+    }
+
+    fn is_crime(&self) -> bool {
+        self.token_mint == CRIME_MINT
+    }
+
+    /// (sol_reserve, token_reserve) in orientation-independent order.
+    fn reserves(&self) -> (u64, u64) {
+        self.pool.sol_and_token_reserves()
+    }
+
+    /// Validate that the requested trade pair matches this pool.
+    fn validate_mint_pair(&self, input: &Pubkey, output: &Pubkey, is_buy: bool) -> Result<()> {
+        let ok = if is_buy {
+            *input == NATIVE_MINT && *output == self.token_mint
+        } else {
+            *input == self.token_mint && *output == NATIVE_MINT
+        };
+        if ok {
+            Ok(())
+        } else {
+            Err(anyhow!(
+                "SolPoolAmm: mint pair {} -> {} does not match pool {} (WSOL <-> {})",
+                input,
+                output,
+                self.key,
+                self.token_mint
+            ))
         }
     }
 
@@ -210,6 +265,8 @@ impl SolPoolAmm {
     ///
     /// Flow: tax deducted from SOL input, LP fee deducted, then constant-product swap.
     fn quote_buy(&self, amount_in: u64) -> Result<Quote> {
+        let (reserve_sol, reserve_token) = self.reserves();
+
         // 1. Tax deducted from SOL input
         let tax = calculate_tax(amount_in, self.buy_tax_bps)
             .ok_or_else(|| anyhow!("Tax calculation overflow"))?;
@@ -229,13 +286,13 @@ impl SolPoolAmm {
         }
 
         // 2. LP fee deducted from post-tax amount
-        let effective_input = calculate_effective_input(sol_to_swap, self.lp_fee_bps)
+        let effective_input = calculate_effective_input(sol_to_swap, self.pool.lp_fee_bps)
             .ok_or_else(|| anyhow!("Effective input calculation overflow"))?;
 
         // 3. Constant-product swap
         let out_amount = calculate_swap_output(
-            self.reserve_sol,
-            self.reserve_token,
+            reserve_sol,
+            reserve_token,
             effective_input,
         )
         .ok_or_else(|| anyhow!("Swap output calculation overflow or zero reserves"))?;
@@ -258,14 +315,16 @@ impl SolPoolAmm {
     ///
     /// Flow: LP fee deducted from token input, constant-product swap, then tax on SOL output.
     fn quote_sell(&self, amount_in: u64) -> Result<Quote> {
+        let (reserve_sol, reserve_token) = self.reserves();
+
         // 1. LP fee deducted from token input
-        let effective_input = calculate_effective_input(amount_in, self.lp_fee_bps)
+        let effective_input = calculate_effective_input(amount_in, self.pool.lp_fee_bps)
             .ok_or_else(|| anyhow!("Effective input calculation overflow"))?;
 
         // 2. Constant-product swap (token -> SOL)
         let gross_sol = calculate_swap_output(
-            self.reserve_token,
-            self.reserve_sol,
+            reserve_token,
+            reserve_sol,
             effective_input,
         )
         .ok_or_else(|| anyhow!("Swap output calculation overflow or zero reserves"))?;
@@ -278,15 +337,9 @@ impl SolPoolAmm {
             .checked_sub(tax)
             .ok_or_else(|| anyhow!("Tax exceeds gross output"))?;
 
-        // LP fee portion in token terms -- we report in SOL for consistency with fee_mint
-        // Actually, fee_mint is NATIVE_MINT so we should express the LP fee in SOL.
-        // The LP fee is taken from the token input. Approximate SOL equivalent:
-        // lp_fee_tokens = amount_in - effective_input_as_u64
-        // But since the fee_mint is SOL, we report only the tax as the primary fee,
-        // and include LP fee in the total fee_pct.
-        // LP fee is in token terms, can't be directly added to SOL tax.
-        // Jupiter uses fee_pct as the authoritative fee indicator.
-        let _lp_fee_tokens = amount_in.checked_sub(effective_input as u64).unwrap_or(0);
+        // The LP fee is taken from the token input; fee_mint is SOL, so we
+        // report only the tax as the primary fee amount. Jupiter uses
+        // fee_pct (LP + tax combined) as the authoritative fee indicator.
         Ok(Quote {
             in_amount: amount_in,
             out_amount: net_sol,
@@ -298,13 +351,13 @@ impl SolPoolAmm {
 
     /// Total buy fee percentage (LP + tax) as a Decimal.
     fn total_buy_fee_pct(&self) -> Decimal {
-        let total_bps = (self.lp_fee_bps as u32) + (self.buy_tax_bps as u32);
+        let total_bps = (self.pool.lp_fee_bps as u32) + (self.buy_tax_bps as u32);
         Decimal::from(total_bps) / Decimal::from(10_000u32)
     }
 
     /// Total sell fee percentage (LP + tax) as a Decimal.
     fn total_sell_fee_pct(&self) -> Decimal {
-        let total_bps = (self.lp_fee_bps as u32) + (self.sell_tax_bps as u32);
+        let total_bps = (self.pool.lp_fee_bps as u32) + (self.sell_tax_bps as u32);
         Decimal::from(total_bps) / Decimal::from(10_000u32)
     }
 }
@@ -316,7 +369,10 @@ impl SolPoolAmm {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::constants::LP_FEE_BPS;
+    use crate::accounts::addresses::CRIME_SOL_POOL;
+    use crate::state::pool_state::tests::mock_pool_state;
+    use jupiter_amm_interface::ClockRef;
+    use solana_sdk::account::Account;
 
     /// Create a SolPoolAmm directly with known values (bypassing from_keyed_account).
     fn make_amm(
@@ -326,15 +382,38 @@ mod tests {
         buy_tax_bps: u16,
         sell_tax_bps: u16,
     ) -> SolPoolAmm {
-        SolPoolAmm {
-            key: if is_crime { CRIME_SOL_POOL } else { crate::accounts::addresses::FRAUD_SOL_POOL },
-            is_crime,
-            reserve_sol,
-            reserve_token,
-            lp_fee_bps: LP_FEE_BPS,
-            buy_tax_bps,
-            sell_tax_bps,
+        SolPoolAmm::new_for_testing(is_crime, reserve_sol, reserve_token, buy_tax_bps, sell_tax_bps)
+    }
+
+    fn amm_context() -> AmmContext {
+        AmmContext { clock_ref: ClockRef::default() }
+    }
+
+    fn keyed_account(key: Pubkey, data: Vec<u8>, owner: Pubkey) -> KeyedAccount {
+        KeyedAccount {
+            key,
+            account: Account {
+                lamports: 1_000_000,
+                data,
+                owner,
+                executable: false,
+                rent_epoch: 0,
+            },
+            params: None,
         }
+    }
+
+    /// CRIME/SOL-shaped pool data (mainnet orientation: mint_a = WSOL).
+    fn crime_shaped_data() -> Vec<u8> {
+        mock_pool_state(
+            &NATIVE_MINT,
+            &CRIME_MINT,
+            &Pubkey::new_unique(),
+            &Pubkey::new_unique(),
+            100_000_000_000,
+            100_000_000_000,
+            100,
+        )
     }
 
     #[test]
@@ -446,6 +525,29 @@ mod tests {
     }
 
     #[test]
+    fn quote_rejects_mismatched_mint_pair() {
+        let amm = make_amm(true, 100_000_000_000, 100_000_000_000, 400, 1400);
+
+        // FRAUD into the CRIME pool must not silently quote with CRIME reserves
+        let result = amm.quote(&QuoteParams {
+            amount: 1_000_000_000,
+            input_mint: FRAUD_MINT,
+            output_mint: NATIVE_MINT,
+            swap_mode: SwapMode::ExactIn,
+        });
+        assert!(result.is_err());
+
+        // Buy direction with the wrong output token
+        let result = amm.quote(&QuoteParams {
+            amount: 1_000_000_000,
+            input_mint: NATIVE_MINT,
+            output_mint: FRAUD_MINT,
+            swap_mode: SwapMode::ExactIn,
+        });
+        assert!(result.is_err());
+    }
+
+    #[test]
     fn label_is_dr_fraudsworth() {
         let amm = make_amm(true, 1, 1, 400, 1400);
         assert_eq!(amm.label(), "Dr Fraudsworth");
@@ -495,61 +597,6 @@ mod tests {
     }
 
     #[test]
-    fn from_keyed_account_rejects_unknown_pool_key() {
-        use jupiter_amm_interface::ClockRef;
-        use solana_sdk::account::Account;
-
-        let keyed = KeyedAccount {
-            key: Pubkey::new_unique(),
-            account: Account {
-                lamports: 0,
-                data: vec![0u8; 224],
-                owner: crate::accounts::addresses::AMM_PROGRAM_ID,
-                executable: false,
-                rent_epoch: 0,
-            },
-            params: None,
-        };
-        let ctx = AmmContext { clock_ref: ClockRef::default() };
-
-        let err = match SolPoolAmm::from_keyed_account(&keyed, &ctx) {
-            Ok(_) => panic!("unknown pool key must be rejected"),
-            Err(e) => e,
-        };
-        let msg = err.to_string();
-        assert!(msg.contains("unknown pool key"), "error should name the cause: {msg}");
-    }
-
-    #[test]
-    fn from_keyed_account_accepts_both_known_pools() {
-        use jupiter_amm_interface::ClockRef;
-        use solana_sdk::account::Account;
-
-        for (pool_key, expected_mint) in [
-            (CRIME_SOL_POOL, CRIME_MINT),
-            (crate::accounts::addresses::FRAUD_SOL_POOL, FRAUD_MINT),
-        ] {
-            let keyed = KeyedAccount {
-                key: pool_key,
-                account: Account {
-                    lamports: 0,
-                    data: vec![0u8; 224],
-                    owner: crate::accounts::addresses::AMM_PROGRAM_ID,
-                    executable: false,
-                    rent_epoch: 0,
-                },
-                params: None,
-            };
-            let ctx = AmmContext { clock_ref: ClockRef::default() };
-
-            let amm = SolPoolAmm::from_keyed_account(&keyed, &ctx)
-                .expect("known pool key must construct");
-            assert_eq!(amm.key(), pool_key);
-            assert!(amm.get_reserve_mints().contains(&expected_mint));
-        }
-    }
-
-    #[test]
     fn buy_quote_high_tax_still_works() {
         // 50% buy tax (extreme case)
         let amm = make_amm(true, 100_000_000_000, 100_000_000_000, 5000, 5000);
@@ -564,5 +611,126 @@ mod tests {
         // 50% tax = 500M lamports tax, 500M to swap
         assert!(quote.out_amount > 0);
         assert!(quote.fee_amount >= 500_000_000);
+    }
+
+    // =========================================================================
+    // from_keyed_account: generic construction + shape validation
+    // =========================================================================
+
+    #[test]
+    fn from_keyed_account_accepts_any_key_with_supported_shape() {
+        // Auto-discovery readiness: a NEW pool account (unknown key) with a
+        // valid CRIME/SOL shape constructs without SDK changes.
+        let new_pool_key = Pubkey::new_unique();
+        let keyed = keyed_account(new_pool_key, crime_shaped_data(), AMM_PROGRAM_ID);
+
+        let amm = SolPoolAmm::from_keyed_account(&keyed, &amm_context())
+            .expect("supported pool shape must construct");
+        assert_eq!(amm.key(), new_pool_key);
+        assert_eq!(amm.get_reserve_mints(), vec![NATIVE_MINT, CRIME_MINT]);
+    }
+
+    #[test]
+    fn from_keyed_account_accepts_both_faction_tokens() {
+        for token in [CRIME_MINT, FRAUD_MINT] {
+            let data = mock_pool_state(
+                &NATIVE_MINT,
+                &token,
+                &Pubkey::new_unique(),
+                &Pubkey::new_unique(),
+                1,
+                1,
+                100,
+            );
+            let keyed = keyed_account(Pubkey::new_unique(), data, AMM_PROGRAM_ID);
+            let amm = SolPoolAmm::from_keyed_account(&keyed, &amm_context())
+                .expect("faction token pool must construct");
+            assert!(amm.get_reserve_mints().contains(&token));
+        }
+    }
+
+    #[test]
+    fn from_keyed_account_rejects_wrong_owner() {
+        let keyed = keyed_account(Pubkey::new_unique(), crime_shaped_data(), Pubkey::new_unique());
+
+        let err = match SolPoolAmm::from_keyed_account(&keyed, &amm_context()) {
+            Ok(_) => panic!("wrong owner must be rejected"),
+            Err(e) => e,
+        };
+        assert!(err.to_string().contains("not the AMM program"), "got: {err}");
+    }
+
+    #[test]
+    fn from_keyed_account_rejects_unsupported_token_mint() {
+        let data = mock_pool_state(
+            &NATIVE_MINT,
+            &Pubkey::new_unique(), // not CRIME or FRAUD
+            &Pubkey::new_unique(),
+            &Pubkey::new_unique(),
+            1,
+            1,
+            100,
+        );
+        let keyed = keyed_account(Pubkey::new_unique(), data, AMM_PROGRAM_ID);
+
+        let err = match SolPoolAmm::from_keyed_account(&keyed, &amm_context()) {
+            Ok(_) => panic!("unsupported token mint must be rejected"),
+            Err(e) => e,
+        };
+        assert!(err.to_string().contains("unsupported token mint"), "got: {err}");
+    }
+
+    #[test]
+    fn from_keyed_account_rejects_non_sol_pool() {
+        let data = mock_pool_state(
+            &CRIME_MINT,
+            &FRAUD_MINT, // no SOL side
+            &Pubkey::new_unique(),
+            &Pubkey::new_unique(),
+            1,
+            1,
+            100,
+        );
+        let keyed = keyed_account(Pubkey::new_unique(), data, AMM_PROGRAM_ID);
+
+        let err = match SolPoolAmm::from_keyed_account(&keyed, &amm_context()) {
+            Ok(_) => panic!("non-SOL pool must be rejected"),
+            Err(e) => e,
+        };
+        assert!(err.to_string().contains("not SOL-quoted"), "got: {err}");
+    }
+
+    #[test]
+    fn from_keyed_account_rejects_bad_discriminator() {
+        // Zeroed data has the right owner and length but no PoolState
+        // discriminator — e.g. some other AMM-program account from a scan.
+        let keyed = keyed_account(Pubkey::new_unique(), vec![0u8; 224], AMM_PROGRAM_ID);
+
+        let err = match SolPoolAmm::from_keyed_account(&keyed, &amm_context()) {
+            Ok(_) => panic!("bad discriminator must be rejected"),
+            Err(e) => e,
+        };
+        assert!(err.to_string().contains("discriminator"), "got: {err}");
+    }
+
+    #[test]
+    fn from_keyed_account_reversed_orientation_constructs() {
+        // Token on mint_a side (how a future canonical-ordering pool could
+        // land): reserves must still resolve to (sol, token) correctly.
+        let data = mock_pool_state(
+            &CRIME_MINT,
+            &NATIVE_MINT,
+            &Pubkey::new_unique(),
+            &Pubkey::new_unique(),
+            777, // reserve_a = token side here
+            555, // reserve_b = SOL side here
+            100,
+        );
+        let keyed = keyed_account(Pubkey::new_unique(), data, AMM_PROGRAM_ID);
+
+        let amm = SolPoolAmm::from_keyed_account(&keyed, &amm_context())
+            .expect("reversed SOL pool must construct");
+        assert_eq!(amm.get_reserve_mints(), vec![NATIVE_MINT, CRIME_MINT]);
+        assert_eq!(amm.reserves(), (555, 777));
     }
 }

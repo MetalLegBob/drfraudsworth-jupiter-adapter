@@ -363,3 +363,72 @@ fn get_swap_and_account_metas_buy_real_data() {
     assert!(result.account_metas[0].is_signer);
     eprintln!("Generated mainnet buy instruction: {} accounts", result.account_metas.len());
 }
+
+// =============================================================================
+// Generic-path / constant-path equivalence
+// =============================================================================
+
+/// The generic meta builder (fed REAL mainnet PoolState bytes) must produce
+/// byte-identical account lists to the constant-based wrappers. This proves
+/// both that the parsed on-chain mints/vaults equal our hardcoded addresses
+/// and that the generic path preserves the audited account ordering.
+#[test]
+fn real_data_metas_equal_constant_builder_metas() {
+    use drfraudsworth_jupiter_adapter::accounts::sol_pool_accounts::{
+        build_buy_account_metas, build_sell_account_metas,
+    };
+
+    for (pool_key, pool_hex, is_crime, token_mint) in [
+        (CRIME_SOL_POOL, CRIME_POOL_HEX, true, CRIME_MINT),
+        (FRAUD_SOL_POOL, FRAUD_POOL_HEX, false, FRAUD_MINT),
+    ] {
+        let keyed = KeyedAccount {
+            key: pool_key,
+            account: Account {
+                lamports: 2_449_920, data: decode_hex(pool_hex), owner: AMM_PROGRAM_ID,
+                executable: false, rent_epoch: 0,
+            },
+            params: None,
+        };
+        let amm = SolPoolAmm::from_keyed_account(&keyed, &amm_context()).unwrap();
+
+        let user = Pubkey::new_unique();
+        let wsol_ata = Pubkey::new_unique();
+        let token_ata = Pubkey::new_unique();
+        let jup = Pubkey::new_unique();
+
+        // Buy direction
+        let generic = amm.get_swap_and_account_metas(&jupiter_amm_interface::SwapParams {
+            swap_mode: SwapMode::ExactIn,
+            in_amount: 1_000_000_000,
+            out_amount: 0,
+            source_mint: NATIVE_MINT,
+            destination_mint: token_mint,
+            source_token_account: wsol_ata,
+            destination_token_account: token_ata,
+            token_transfer_authority: user,
+            quote_mint_to_referrer: None,
+            jupiter_program_id: &jup,
+            missing_dynamic_accounts_as_default: false,
+        }).unwrap().account_metas;
+        let wrapper = build_buy_account_metas(&user, &wsol_ata, &token_ata, is_crime);
+        assert_eq!(generic, wrapper, "buy metas from mainnet data must equal constant-based metas");
+
+        // Sell direction
+        let generic = amm.get_swap_and_account_metas(&jupiter_amm_interface::SwapParams {
+            swap_mode: SwapMode::ExactIn,
+            in_amount: 1_000_000_000,
+            out_amount: 0,
+            source_mint: token_mint,
+            destination_mint: NATIVE_MINT,
+            source_token_account: token_ata,
+            destination_token_account: wsol_ata,
+            token_transfer_authority: user,
+            quote_mint_to_referrer: None,
+            jupiter_program_id: &jup,
+            missing_dynamic_accounts_as_default: false,
+        }).unwrap().account_metas;
+        let wrapper = build_sell_account_metas(&user, &token_ata, &wsol_ata, is_crime);
+        assert_eq!(generic, wrapper, "sell metas from mainnet data must equal constant-based metas");
+    }
+}
