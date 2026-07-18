@@ -46,6 +46,12 @@ pub struct SolPoolAmm {
     buy_tax_bps: u16,
     /// Current epoch sell tax in BPS
     sell_tax_bps: u16,
+    /// Whether an epoch transition window is open. While true, the AMM's
+    /// Layer-3 gate reverts public swaps with TransitionInProgress (6019),
+    /// so quotes are refused to keep the router out of the window. Always
+    /// false on deployments without the gate feature (the flag byte sits in
+    /// zeroed reserved padding there).
+    transition_in_progress: bool,
 }
 
 impl Amm for SolPoolAmm {
@@ -98,6 +104,7 @@ impl Amm for SolPoolAmm {
             // Jupiter always calls update() before quote().
             buy_tax_bps: 0,
             sell_tax_bps: 0,
+            transition_in_progress: false,
         })
     }
 
@@ -144,6 +151,7 @@ impl Amm for SolPoolAmm {
         let epoch_state = ParsedEpochState::from_bytes(epoch_data)?;
         self.buy_tax_bps = epoch_state.get_tax_bps(self.is_crime(), true);
         self.sell_tax_bps = epoch_state.get_tax_bps(self.is_crime(), false);
+        self.transition_in_progress = epoch_state.transition_in_progress;
 
         Ok(())
     }
@@ -155,6 +163,19 @@ impl Amm for SolPoolAmm {
 
         let is_buy = quote_params.input_mint == NATIVE_MINT;
         self.validate_mint_pair(&quote_params.input_mint, &quote_params.output_mint, is_buy)?;
+
+        // Mirror the AMM's Layer-3 transition gate: while the epoch flip
+        // window is open, on-chain swaps revert with TransitionInProgress
+        // (6019), so refuse the quote instead of routing into a known
+        // failure. Windows normally last a few slots (bounded recovery at 50
+        // slots); the flag clears on the next account refresh.
+        if self.transition_in_progress {
+            return Err(anyhow!(
+                "SolPoolAmm: epoch transition window open for pool {} -- \
+                 on-chain swaps revert with TransitionInProgress until it closes",
+                self.key
+            ));
+        }
 
         if is_buy {
             self.quote_buy(quote_params.amount)
@@ -246,6 +267,7 @@ impl SolPoolAmm {
             token_mint,
             buy_tax_bps,
             sell_tax_bps,
+            transition_in_progress: false,
         }
     }
 
@@ -537,6 +559,34 @@ mod tests {
         });
 
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn quote_refused_while_transition_window_open() {
+        let mut amm = make_amm(true, 100_000_000_000, 100_000_000_000, 400, 1400);
+
+        amm.transition_in_progress = true;
+        let err = match amm.quote(&QuoteParams {
+            amount: 1_000_000_000,
+            input_mint: NATIVE_MINT,
+            output_mint: CRIME_MINT,
+            swap_mode: SwapMode::ExactIn,
+        }) {
+            Ok(_) => panic!("quote must be refused during a transition window"),
+            Err(e) => e,
+        };
+        assert!(err.to_string().contains("transition window"), "got: {err}");
+
+        // Window closed -> quotes flow again.
+        amm.transition_in_progress = false;
+        assert!(amm
+            .quote(&QuoteParams {
+                amount: 1_000_000_000,
+                input_mint: NATIVE_MINT,
+                output_mint: CRIME_MINT,
+                swap_mode: SwapMode::ExactIn,
+            })
+            .is_ok());
     }
 
     #[test]

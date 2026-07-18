@@ -215,6 +215,7 @@ Full address set is in `deployments/mainnet.json` in the protocol repository. Ke
 - **WSOL wrapping:** Jupiter handles SOL <-> WSOL wrapping/unwrapping. The SDK returns only the Tax Program swap instruction.
 - **`unidirectional()`:** Returns `true` for VaultAmm, `false` (default) for SolPoolAmm. Jupiter uses this to avoid routing backwards through vault instances.
 - **Mint-pair validation:** `quote()` and `get_swap_and_account_metas()` reject requests whose mints do not match the instance's pool.
+- **Transition-gate aware:** the protocol's upcoming epoch-transition gate (Layer-3) reverts public swaps for a few slots around each epoch flip while the protocol's internal arbitrage executes. `update()` reads the `transition_in_progress` flag from EpochState and `quote()` refuses while a window is open, so the router never routes into a known revert. On current mainnet the flag byte is zeroed reserved padding, so behavior is unchanged until the gate feature deploys.
 - **Vault liquidity cap:** `VaultAmm::update()` reads the output-side vault token account balance, and quotes exceeding available liquidity are rejected rather than quoted-then-failed on-chain.
 - **`program_dependencies()`:** returns the AMM, Staking, and Transfer Hook programs for SolPool swaps (Transfer Hook for vault conversions) so test harnesses know which dependent programs to load.
 - **`underlying_liquidities()`:** the two `*->PROFIT` vault instances report the same underlying PROFIT vault account, exposing their shared liquidity to the routing engine.

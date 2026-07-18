@@ -316,6 +316,17 @@ fn vault_quotes_after_real_update() {
 // =============================================================================
 
 #[test]
+fn mainnet_epoch_state_transition_flag_is_false() {
+    // Safe-to-ship-early proof: on pre-gate mainnet the transition flag byte
+    // (offset 106) sits inside zeroed reserved padding, so gate-aware quoting
+    // is a no-op until the Layer-3 gate deploys. Verified against live
+    // mainnet 2026-07-18 (bytes 106..117 all zero).
+    let data = decode_hex(EPOCH_STATE_HEX);
+    let parsed = drfraudsworth_jupiter_adapter::state::epoch_state::ParsedEpochState::from_bytes(&data).unwrap();
+    assert!(!parsed.transition_in_progress);
+}
+
+#[test]
 fn epoch_state_discriminator_matches_live() {
     let data = decode_hex(EPOCH_STATE_HEX);
     let live_disc = &data[0..8];

@@ -20,7 +20,7 @@
 use anyhow::{anyhow, Result};
 use sha2::{Sha256, Digest};
 
-use crate::constants::EPOCH_STATE_DISCRIMINATOR;
+use crate::constants::{EPOCH_STATE_DISCRIMINATOR, TRANSITION_IN_PROGRESS_OFFSET};
 
 /// Minimum account data length for EpochState (8 discriminator + 164 data).
 const MIN_LEN: usize = 172;
@@ -32,6 +32,11 @@ pub struct ParsedEpochState {
     pub crime_sell_tax_bps: u16,
     pub fraud_buy_tax_bps: u16,
     pub fraud_sell_tax_bps: u16,
+    /// Whether an epoch transition window is open (byte 106). While true, the
+    /// AMM's Layer-3 gate reverts public swaps with TransitionInProgress
+    /// (6019); quotes should be refused so the router never routes into a
+    /// known-closed window. False on pre-gate deployments (reserved padding).
+    pub transition_in_progress: bool,
 }
 
 impl ParsedEpochState {
@@ -66,6 +71,7 @@ impl ParsedEpochState {
             crime_sell_tax_bps: u16::from_le_bytes([data[35], data[36]]),
             fraud_buy_tax_bps: u16::from_le_bytes([data[37], data[38]]),
             fraud_sell_tax_bps: u16::from_le_bytes([data[39], data[40]]),
+            transition_in_progress: data[TRANSITION_IN_PROGRESS_OFFSET] != 0,
         })
     }
 
@@ -156,6 +162,45 @@ mod tests {
     fn reject_too_short() {
         let data = vec![0u8; 100];
         assert!(ParsedEpochState::from_bytes(&data).is_err());
+    }
+
+    #[test]
+    fn transition_flag_reads_exactly_byte_106() {
+        // Offset-pin: only byte 106 controls the flag. Adjacent bytes set
+        // with 106 clear must read false; 106 set must read true.
+        let mut data = mock_epoch_state(100, 1100, 1100, 100);
+        data[105] = 1;
+        data[107] = 1;
+        assert!(!ParsedEpochState::from_bytes(&data).unwrap().transition_in_progress);
+
+        data[106] = 1;
+        assert!(ParsedEpochState::from_bytes(&data).unwrap().transition_in_progress);
+
+        // Any non-zero value counts as open (mirrors the on-chain `!= 0`).
+        data[106] = 0xFF;
+        assert!(ParsedEpochState::from_bytes(&data).unwrap().transition_in_progress);
+    }
+
+    #[test]
+    fn parse_gate_active_devnet_snapshot() {
+        // Real EpochState from the gate-ACTIVE devnet deployment
+        // (9cUnCnKEMgfvVK1dqhVDDwriurM9ULVtkfiEAX855WVi, fetched 2026-07-18,
+        // epoch 8507): proves the tax offsets survived the transition-state
+        // upgrade (fields were carved from reserved padding; account size
+        // unchanged at 172) and the flag parses from live gate-era data.
+        const DEVNET_HEX: &str = "bf3f8bed900cdfd2f1fe0f1c000000003b210000cb59711c00000000002c01b0042c01b004b0042c01185a711c000000000001c0ae648ed3c682e04aed6ee79d5b7b262611dd74cadccf929cd9425e0d33ff93000100093e711c000000000f3d711c00000000312100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001ff";
+        let data: Vec<u8> = (0..DEVNET_HEX.len())
+            .step_by(2)
+            .map(|i| u8::from_str_radix(&DEVNET_HEX[i..i + 2], 16).unwrap())
+            .collect();
+        assert_eq!(data.len(), 172);
+
+        let parsed = ParsedEpochState::from_bytes(&data).unwrap();
+        assert_eq!(parsed.crime_buy_tax_bps, 300);
+        assert_eq!(parsed.crime_sell_tax_bps, 1200);
+        assert_eq!(parsed.fraud_buy_tax_bps, 1200);
+        assert_eq!(parsed.fraud_sell_tax_bps, 300);
+        assert!(!parsed.transition_in_progress, "snapshot taken between transitions");
     }
 
     #[test]
