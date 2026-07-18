@@ -6,9 +6,14 @@ description = "Jupiter AMM adapter SDK for the Dr. Fraudsworth DEX protocol"
 license = "MIT"
 repository = "https://github.com/MetalLegBob/drfraudsworth-jupiter-adapter"
 keywords = ["jupiter", "solana", "dex", "amm"]
+# Repo-only artifacts: CI config and IDL copies stay out of the published crate
+exclude = [".github/", "idl/"]
 
 [dependencies]
-jupiter-amm-interface = "0.6"
+# =0.6.0 confirmed with Jupiter's team (matches their engine and reference
+# implementation). Exact pin because 0.6.1's open solana-* ranges do not
+# fresh-resolve on the solana 2.x crate generation.
+jupiter-amm-interface = "=0.6.0"
 solana-sdk = "~2.3"
 rust_decimal = "1.36.0"
 ahash = "0.8"

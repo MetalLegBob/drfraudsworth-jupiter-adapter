@@ -164,7 +164,7 @@ cargo run --example quote_example
 
 ## Interface Version
 
-The crate declares `jupiter-amm-interface = "0.6"` and the committed `Cargo.lock` pins 0.6.0, matching [jup-ag/rust-amm-implementation](https://github.com/jup-ag/rust-amm-implementation). The library never constructs `QuoteParams`/`SwapParams`, so it compiles unchanged against 0.6.1 as well; note that a fresh resolve of 0.6.1 requires the solana 3.x crate generation (its `solana_account_decoder::encode_ui_account` import does not exist in the 2.x series).
+The crate pins `jupiter-amm-interface = "=0.6.0"`, confirmed with Jupiter's team and matching [jup-ag/rust-amm-implementation](https://github.com/jup-ag/rust-amm-implementation). The pin is exact because 0.6.1's open solana-* ranges do not fresh-resolve on the solana 2.x crate generation (its `solana_account_decoder::encode_ui_account` import only exists in the 3.x series). The library itself never constructs `QuoteParams`/`SwapParams`, so it compiles unchanged against 0.6.1 whenever Jupiter's engine moves.
 
 ## Program IDs
 
