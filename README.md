@@ -67,12 +67,12 @@ This means the constructor also works with scan-based market discovery (e.g. `ge
 SOL pool swaps have two fee components:
 
 1. **LP fee:** 1% (100 BPS), fixed, deducted from swap amount
-2. **Dynamic tax:** 1-4% (cheap side) or 11-14% (expensive side), VRF-randomized each epoch (~13 min). Tax is split across staking rewards (71%), Carnage Fund (24%), and treasury (5%)
+2. **Dynamic tax:** 1-4% (cheap side) or 11-14% (expensive side), VRF-randomized each epoch (~30 min). Tax is split across staking rewards (71%), Carnage Fund (24%), and treasury (5%)
 
 **Buy (SOL -> token):** Tax deducted from SOL input BEFORE the AMM swap.
 **Sell (token -> SOL):** Tax deducted from SOL output AFTER the AMM swap.
 
-Tax rates change every epoch (~13 minutes). Jupiter's `update()` method refreshes EpochState to get current rates. Stale rates between quote and execution are handled by on-chain slippage protection (`minimum_output`).
+Tax rates change every epoch (~30 minutes). Jupiter's `update()` method refreshes EpochState to get current rates. Stale rates between quote and execution are handled by on-chain slippage protection (`minimum_output`).
 
 ### Vault Conversions
 
@@ -82,7 +82,7 @@ Tax rates change every epoch (~13 minutes). Jupiter's `update()` method refreshe
 
 ## Epoch Dynamics
 
-Each epoch (~13 minutes), VRF randomness determines:
+Each epoch (~30 minutes), VRF randomness determines:
 
 1. **Which faction is cheap** — 75% chance of flipping each epoch
 2. **Exact tax magnitudes** — independently randomized per token from discrete sets
