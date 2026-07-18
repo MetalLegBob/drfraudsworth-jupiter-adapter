@@ -205,6 +205,23 @@ impl Amm for SolPoolAmm {
         // Buy: 24, Sell: 25. Use the larger to be safe.
         25
     }
+
+    fn program_dependencies(&self) -> Vec<(Pubkey, String)> {
+        // Programs a test harness must load for a swap to execute: the Tax
+        // Program (program_id) CPIs into the AMM and Staking programs, and
+        // Token-2022 invokes the Transfer Hook on every token transfer.
+        vec![
+            (AMM_PROGRAM_ID, "amm".to_string()),
+            (
+                crate::accounts::addresses::STAKING_PROGRAM_ID,
+                "staking".to_string(),
+            ),
+            (
+                crate::accounts::addresses::TRANSFER_HOOK_PROGRAM_ID,
+                "transfer-hook".to_string(),
+            ),
+        ]
+    }
 }
 
 impl SolPoolAmm {
@@ -298,9 +315,7 @@ impl SolPoolAmm {
         .ok_or_else(|| anyhow!("Swap output calculation overflow or zero reserves"))?;
 
         // LP fee in SOL terms
-        let lp_fee_sol = sol_to_swap
-            .checked_sub(effective_input as u64)
-            .unwrap_or(0);
+        let lp_fee_sol = sol_to_swap.saturating_sub(effective_input as u64);
 
         Ok(Quote {
             in_amount: amount_in,

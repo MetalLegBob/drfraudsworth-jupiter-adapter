@@ -1,6 +1,6 @@
 [package]
 name = "drfraudsworth-jupiter-adapter"
-version = "0.1.3"
+version = "0.1.4"
 edition = "2021"
 description = "Jupiter AMM adapter SDK for the Dr. Fraudsworth DEX protocol"
 license = "MIT"

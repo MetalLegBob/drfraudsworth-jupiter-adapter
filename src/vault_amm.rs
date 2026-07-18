@@ -9,7 +9,8 @@
 // Each VaultAmm instance is unidirectional (input -> output).
 // CRIME <-> FRAUD is NOT supported directly (Jupiter routes via multi-hop).
 //
-// Zero fees. Deterministic output amounts. No on-chain state changes needed for quoting.
+// Zero fees. Deterministic output amounts. update() tracks the output-side
+// vault balance so quotes never exceed the liquidity actually available.
 
 use anyhow::{anyhow, Result};
 use jupiter_amm_interface::{
@@ -19,12 +20,16 @@ use jupiter_amm_interface::{
 use rust_decimal::Decimal;
 use solana_sdk::pubkey::Pubkey;
 
+use std::collections::HashSet;
+
 use crate::accounts::addresses::{
     CONVERSION_VAULT_PROGRAM_ID, CRIME_MINT, CRIME_SOL_POOL, FRAUD_MINT, FRAUD_SOL_POOL,
-    PROFIT_MINT, VAULT_CONFIG_PDA,
+    PROFIT_MINT, TRANSFER_HOOK_PROGRAM_ID, VAULT_CONFIG_PDA, VAULT_CRIME, VAULT_FRAUD,
+    VAULT_PROFIT,
 };
 use crate::accounts::vault_accounts::build_vault_account_metas;
 use crate::math::vault_math::compute_vault_output;
+use crate::state::token_account::parse_token_account_amount;
 
 /// Jupiter Amm implementation for Conversion Vault (fixed-rate token conversions).
 ///
@@ -40,6 +45,11 @@ pub struct VaultAmm {
     output_mint: Pubkey,
     /// Human-readable label suffix
     _label_suffix: String,
+    /// The vault's token account for the OUTPUT mint (the liquidity consumed)
+    output_vault: Pubkey,
+    /// Output vault balance. Initialized to u64::MAX (uncapped) and refreshed
+    /// by update() -- Jupiter always calls update() before quote().
+    output_vault_balance: u64,
 }
 
 impl Amm for VaultAmm {
@@ -68,11 +78,19 @@ impl Amm for VaultAmm {
 
             let _label_suffix = format_label(&input_mint, &output_mint);
 
+            // Both mints must be protocol tokens with a known vault account.
+            vault_for_mint(&input_mint)
+                .ok_or_else(|| anyhow!("VaultAmm: unsupported input mint {}", input_mint))?;
+            let output_vault = vault_for_mint(&output_mint)
+                .ok_or_else(|| anyhow!("VaultAmm: unsupported output mint {}", output_mint))?;
+
             return Ok(Self {
                 key: keyed_account.key,
                 input_mint,
                 output_mint,
                 _label_suffix,
+                output_vault,
+                output_vault_balance: u64::MAX,
             });
         }
 
@@ -106,19 +124,24 @@ impl Amm for VaultAmm {
     }
 
     fn get_accounts_to_update(&self) -> Vec<Pubkey> {
-        // VaultConfig PDA: lets Jupiter verify the vault program is initialized.
-        // No state extraction needed (rates are fixed), but Jupiter requires
-        // at least one account for liveness checks.
-        vec![VAULT_CONFIG_PDA]
+        // VaultConfig PDA (liveness check) + the output-side vault token
+        // account (balance cap for quotes).
+        vec![VAULT_CONFIG_PDA, self.output_vault]
     }
 
     fn update(&mut self, account_map: &AccountMap) -> Result<()> {
-        // Minimal validation: confirm VaultConfig account exists and has data.
+        // Confirm VaultConfig account exists and has data (liveness check).
         let data = try_get_account_data(account_map, &VAULT_CONFIG_PDA)?;
         if data.is_empty() {
             return Err(anyhow!("VaultConfig account has no data"));
         }
-        // No state to update -- conversion rates are fixed at 100:1.
+
+        // Refresh the output vault balance so quotes are capped at the
+        // liquidity actually available. The conversion rate itself is fixed
+        // at 100:1 on-chain.
+        let vault_data = try_get_account_data(account_map, &self.output_vault)?;
+        self.output_vault_balance = parse_token_account_amount(vault_data, &self.output_mint)?;
+
         Ok(())
     }
 
@@ -151,6 +174,17 @@ impl Amm for VaultAmm {
                 quote_params.amount
             )
         })?;
+
+        // Cap at the liquidity the vault can actually pay out.
+        if out_amount > self.output_vault_balance {
+            return Err(anyhow!(
+                "VaultAmm: insufficient vault liquidity for {} -> {}: need {}, vault holds {}",
+                self.input_mint,
+                self.output_mint,
+                out_amount,
+                self.output_vault_balance
+            ));
+        }
 
         Ok(Quote {
             in_amount: quote_params.amount,
@@ -192,6 +226,18 @@ impl Amm for VaultAmm {
     fn unidirectional(&self) -> bool {
         true
     }
+
+    fn program_dependencies(&self) -> Vec<(Pubkey, String)> {
+        // Token-2022 invokes the Transfer Hook on every vault transfer.
+        vec![(TRANSFER_HOOK_PROGRAM_ID, "transfer-hook".to_string())]
+    }
+
+    fn underlying_liquidities(&self) -> Option<HashSet<Pubkey>> {
+        // The output-side vault token account is the liquidity a conversion
+        // consumes. CRIME->PROFIT and FRAUD->PROFIT share the same PROFIT
+        // vault, and this lets Jupiter's engine see that overlap.
+        Some(HashSet::from([self.output_vault]))
+    }
 }
 
 impl VaultAmm {
@@ -201,11 +247,15 @@ impl VaultAmm {
     pub fn new_for_testing(input_mint: Pubkey, output_mint: Pubkey) -> Self {
         let key = derive_synthetic_key(&input_mint, &output_mint);
         let _label_suffix = format_label(&input_mint, &output_mint);
+        let output_vault =
+            vault_for_mint(&output_mint).expect("testing constructor requires a protocol mint");
         Self {
             key,
             input_mint,
             output_mint,
             _label_suffix,
+            output_vault,
+            output_vault_balance: u64::MAX,
         }
     }
 }
@@ -243,6 +293,9 @@ pub fn known_instances() -> Vec<(Pubkey, VaultAmm)> {
                 input_mint: *input,
                 output_mint: *output,
                 _label_suffix: label.to_string(),
+                output_vault: vault_for_mint(output)
+                    .expect("known instances use protocol mints"),
+                output_vault_balance: u64::MAX,
             };
             (key, instance)
         })
@@ -271,6 +324,21 @@ pub fn all_pool_keys() -> Vec<Pubkey> {
 // =============================================================================
 // Helpers
 // =============================================================================
+
+/// Map a protocol mint to the conversion vault's token account for it.
+///
+/// Returns None for non-protocol mints.
+fn vault_for_mint(mint: &Pubkey) -> Option<Pubkey> {
+    if *mint == CRIME_MINT {
+        Some(VAULT_CRIME)
+    } else if *mint == FRAUD_MINT {
+        Some(VAULT_FRAUD)
+    } else if *mint == PROFIT_MINT {
+        Some(VAULT_PROFIT)
+    } else {
+        None
+    }
+}
 
 /// Derive a deterministic synthetic key for a vault conversion pair.
 ///
@@ -484,10 +552,106 @@ mod tests {
     }
 
     #[test]
-    fn accounts_to_update_has_vault_config() {
+    fn accounts_to_update_has_config_and_output_vault() {
         let instances = known_instances();
+
+        // CRIME -> PROFIT consumes the PROFIT vault
         let (_, amm) = &instances[0];
-        let accounts = amm.get_accounts_to_update();
-        assert_eq!(accounts, vec![VAULT_CONFIG_PDA]);
+        assert_eq!(amm.get_accounts_to_update(), vec![VAULT_CONFIG_PDA, VAULT_PROFIT]);
+
+        // PROFIT -> CRIME consumes the CRIME vault
+        let (_, amm) = &instances[2];
+        assert_eq!(amm.get_accounts_to_update(), vec![VAULT_CONFIG_PDA, VAULT_CRIME]);
+    }
+
+    #[test]
+    fn quote_capped_at_output_vault_balance() {
+        let mut amm = VaultAmm::new_for_testing(CRIME_MINT, PROFIT_MINT);
+
+        // 20_000 CRIME -> 200 PROFIT. Vault holding only 100 must reject.
+        amm.output_vault_balance = 100;
+        let result = amm.quote(&QuoteParams {
+            amount: 20_000,
+            input_mint: CRIME_MINT,
+            output_mint: PROFIT_MINT,
+            swap_mode: SwapMode::ExactIn,
+        });
+        assert!(result.is_err(), "quote above vault balance must error");
+
+        // Exactly enough passes.
+        amm.output_vault_balance = 200;
+        let quote = amm
+            .quote(&QuoteParams {
+                amount: 20_000,
+                input_mint: CRIME_MINT,
+                output_mint: PROFIT_MINT,
+                swap_mode: SwapMode::ExactIn,
+            })
+            .unwrap();
+        assert_eq!(quote.out_amount, 200);
+    }
+
+    #[test]
+    fn profit_outputs_share_underlying_liquidity() {
+        let instances = known_instances();
+        let (_, crime_to_profit) = &instances[0];
+        let (_, fraud_to_profit) = &instances[1];
+        let (_, profit_to_crime) = &instances[2];
+
+        // Both *->PROFIT directions consume the same PROFIT vault.
+        assert_eq!(
+            crime_to_profit.underlying_liquidities(),
+            fraud_to_profit.underlying_liquidities()
+        );
+        // PROFIT->CRIME consumes a different vault.
+        assert_ne!(
+            crime_to_profit.underlying_liquidities(),
+            profit_to_crime.underlying_liquidities()
+        );
+    }
+
+    #[test]
+    fn update_refreshes_output_vault_balance() {
+        use crate::state::token_account::tests::mock_token_account;
+        use solana_sdk::account::Account;
+
+        let mut amm = VaultAmm::new_for_testing(CRIME_MINT, PROFIT_MINT);
+
+        let mut map = AccountMap::default();
+        map.insert(VAULT_CONFIG_PDA, Account {
+            lamports: 1_000_000,
+            data: vec![1u8; 9],
+            owner: CONVERSION_VAULT_PROGRAM_ID,
+            executable: false,
+            rent_epoch: 0,
+        });
+        map.insert(VAULT_PROFIT, Account {
+            lamports: 1_000_000,
+            data: mock_token_account(&PROFIT_MINT, &Pubkey::new_unique(), 500),
+            owner: crate::accounts::addresses::TOKEN_2022_PROGRAM_ID,
+            executable: false,
+            rent_epoch: 0,
+        });
+
+        amm.update(&map).unwrap();
+
+        // 60_000 CRIME -> 600 PROFIT > 500 available -> rejected
+        let result = amm.quote(&QuoteParams {
+            amount: 60_000,
+            input_mint: CRIME_MINT,
+            output_mint: PROFIT_MINT,
+            swap_mode: SwapMode::ExactIn,
+        });
+        assert!(result.is_err());
+
+        // 40_000 CRIME -> 400 PROFIT <= 500 -> ok
+        assert!(amm
+            .quote(&QuoteParams {
+                amount: 40_000,
+                input_mint: CRIME_MINT,
+                output_mint: PROFIT_MINT,
+                swap_mode: SwapMode::ExactIn,
+            })
+            .is_ok());
     }
 }

@@ -1,5 +1,7 @@
 # Dr. Fraudsworth Jupiter Adapter SDK
 
+[![CI](https://github.com/MetalLegBob/drfraudsworth-jupiter-adapter/actions/workflows/ci.yml/badge.svg)](https://github.com/MetalLegBob/drfraudsworth-jupiter-adapter/actions/workflows/ci.yml)
+
 Jupiter AMM adapter for the Dr. Fraudsworth DEX protocol on Solana. Implements the `jupiter-amm-interface::Amm` trait so Jupiter's routing engine can route swaps through Dr. Fraudsworth's on-chain programs.
 
 This repository contains the standalone adapter crate. The on-chain programs, Anchor IDLs, and the math-parity test suite (SDK quotes proven equal to on-chain outputs) live in the protocol repository: [github.com/MetalLegBob/drfraudsworth](https://github.com/MetalLegBob/drfraudsworth).
@@ -179,7 +181,7 @@ Jupiter needs to know which programs are called for each swap type:
 
 ## IDLs
 
-Anchor IDLs for all six programs are published in the protocol repository: [github.com/MetalLegBob/drfraudsworth](https://github.com/MetalLegBob/drfraudsworth) (`target/idl/*.json`).
+Anchor IDLs for all six programs are included in this repository under [`idl/`](./idl/). Each IDL embeds its mainnet program address; these are the same IDLs the production frontend runs against.
 
 ## Token Mints
 
@@ -213,6 +215,9 @@ Full address set is in `deployments/mainnet.json` in the protocol repository. Ke
 - **WSOL wrapping:** Jupiter handles SOL <-> WSOL wrapping/unwrapping. The SDK returns only the Tax Program swap instruction.
 - **`unidirectional()`:** Returns `true` for VaultAmm, `false` (default) for SolPoolAmm. Jupiter uses this to avoid routing backwards through vault instances.
 - **Mint-pair validation:** `quote()` and `get_swap_and_account_metas()` reject requests whose mints do not match the instance's pool.
+- **Vault liquidity cap:** `VaultAmm::update()` reads the output-side vault token account balance, and quotes exceeding available liquidity are rejected rather than quoted-then-failed on-chain.
+- **`program_dependencies()`:** returns the AMM, Staking, and Transfer Hook programs for SolPool swaps (Transfer Hook for vault conversions) so test harnesses know which dependent programs to load.
+- **`underlying_liquidities()`:** the two `*->PROFIT` vault instances report the same underlying PROFIT vault account, exposing their shared liquidity to the routing engine.
 
 ## Testing
 
@@ -224,6 +229,8 @@ cargo test
 # Run the quote example
 cargo run --example quote_example
 ```
+
+See [TESTING.md](./TESTING.md) for the full suite breakdown. CI runs the suite plus clippy on every push.
 
 The mainnet-data validation suite parses real (hex-embedded) mainnet account snapshots and includes an equivalence proof that account lists built from parsed on-chain data are byte-identical to the constant-based builders.
 

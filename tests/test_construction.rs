@@ -291,7 +291,9 @@ fn sol_pool_accounts_to_update() {
 fn vault_accounts_to_update() {
     for (_, amm) in known_instances() {
         let accounts = amm.get_accounts_to_update();
-        assert_eq!(accounts, vec![VAULT_CONFIG_PDA]);
+        // VaultConfig liveness check + output-side vault balance account
+        assert_eq!(accounts.len(), 2);
+        assert_eq!(accounts[0], VAULT_CONFIG_PDA);
     }
 }
 
