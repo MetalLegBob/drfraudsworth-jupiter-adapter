@@ -6,12 +6,6 @@ pub const LP_FEE_BPS: u16 = 100;
 /// Conversion rate for the vault (100:1 CRIME/FRAUD:PROFIT).
 pub const CONVERSION_RATE: u64 = 100;
 
-/// Token decimals for all Dr. Fraudsworth tokens (CRIME, FRAUD, PROFIT).
-pub const TOKEN_DECIMALS: u8 = 6;
-
-/// SOL decimals (native mint).
-pub const SOL_DECIMALS: u8 = 9;
-
 /// Anchor discriminator for EpochState account.
 ///
 /// Computed as: sha256("account:EpochState")[0..8]
@@ -33,17 +27,22 @@ pub const EPOCH_STATE_DISCRIMINATOR: [u8; 8] = [0xbf, 0x3f, 0x8b, 0xed, 0x90, 0x
 /// Known value (hex): f7 ed e3 f5 d7 c3 de 46
 pub const POOL_STATE_DISCRIMINATOR: [u8; 8] = [0xf7, 0xed, 0xe3, 0xf5, 0xd7, 0xc3, 0xde, 0x46];
 
-/// Absolute byte offset of `EpochState.transition_in_progress` (8-byte Anchor
-/// discriminator + 98 bytes of preceding fields).
+/// Absolute byte offsets of the upgraded EpochState pause fields.
 ///
-/// Mirrors the AMM's Layer-3 transition gate (`transition_gate.rs`
-/// `TRANSITION_OFFSET = 106` on-chain), which reverts reserve-mutating swaps
-/// with `TransitionInProgress` (6019) while this byte is non-zero — the
-/// window in which the protocol's internal arb executes an epoch flip.
-///
-/// On deployments without the gate feature this byte sits inside zeroed
-/// reserved padding, so the flag reads false and gate-aware quoting is a
-/// no-op. Verified against live devnet (gate-active) and mainnet (pre-gate)
-/// account data on 2026-07-18; the EpochState account size (172 bytes) is
-/// identical on both.
-pub const TRANSITION_IN_PROGRESS_OFFSET: usize = 106;
+/// Byte 106 is no longer a boolean transition flag: it is the first byte of
+/// the little-endian `pause_end_slot: u64` field. Treating it as a boolean
+/// makes route availability depend on the low byte of a slot number. Public
+/// swaps are allowed only when `trading_paused == false` and the shared
+/// Jupiter clock is at or beyond `pause_end_slot` (inclusive).
+pub const PAUSE_END_SLOT_OFFSET: usize = 106;
+pub const TRADING_PAUSED_OFFSET: usize = 114;
+pub const EPOCH_INITIALIZED_OFFSET: usize = 170;
+
+/// Anchor instruction discriminators for the Tax swap lanes.
+/// The pinned Jupiter interface still returns `Swap::TokenSwap`; the paused
+/// integration must map the selected lane to these bytes when serializing the
+/// Tax instruction rather than guessing from account count.
+pub const SWAP_SOL_BUY_DISCRIMINATOR: [u8; 8] = [158, 213, 169, 65, 11, 116, 176, 25];
+pub const SWAP_SOL_SELL_DISCRIMINATOR: [u8; 8] = [136, 242, 218, 149, 17, 222, 250, 240];
+pub const SWAP_SPL_BUY_DISCRIMINATOR: [u8; 8] = [145, 254, 202, 19, 150, 31, 185, 146];
+pub const SWAP_SPL_SELL_DISCRIMINATOR: [u8; 8] = [250, 17, 196, 68, 180, 202, 218, 155];

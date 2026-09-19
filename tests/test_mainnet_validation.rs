@@ -6,15 +6,17 @@
 // Tests: parse real data, construct Amm, update from AccountMap, quote with
 // live reserves, verify discriminators.
 
-use jupiter_amm_interface::{AccountMap, Amm, AmmContext, ClockRef, KeyedAccount, QuoteParams, SwapMode};
+use jupiter_amm_interface::{
+    AccountMap, Amm, AmmContext, ClockRef, KeyedAccount, QuoteParams, SwapMode,
+};
 use solana_sdk::account::Account;
 use solana_sdk::pubkey::Pubkey;
 
 use drfraudsworth_jupiter_adapter::accounts::addresses::*;
 use drfraudsworth_jupiter_adapter::constants::EPOCH_STATE_DISCRIMINATOR;
 use drfraudsworth_jupiter_adapter::sol_pool_amm::SolPoolAmm;
-use drfraudsworth_jupiter_adapter::vault_amm::{VaultAmm, known_instances};
 use drfraudsworth_jupiter_adapter::state::epoch_state::compute_epoch_state_discriminator;
+use drfraudsworth_jupiter_adapter::vault_amm::{known_instances, VaultAmm};
 
 // =============================================================================
 // Real mainnet account data (fetched 2026-03-30)
@@ -46,19 +48,24 @@ fn decode_hex(hex: &str) -> Vec<u8> {
 }
 
 fn amm_context() -> AmmContext {
-    AmmContext { clock_ref: ClockRef::default() }
+    AmmContext {
+        clock_ref: ClockRef::default(),
+    }
 }
 
 fn build_account_map(entries: Vec<(Pubkey, Vec<u8>, Pubkey)>) -> AccountMap {
     let mut map = AccountMap::default();
     for (key, data, owner) in entries {
-        map.insert(key, Account {
-            lamports: 2_000_000,
-            data,
-            owner,
-            executable: false,
-            rent_epoch: 0,
-        });
+        map.insert(
+            key,
+            Account {
+                lamports: 2_000_000,
+                data,
+                owner,
+                executable: false,
+                rent_epoch: 0,
+            },
+        );
     }
     map
 }
@@ -73,8 +80,11 @@ fn crime_pool_from_keyed_account_real_data() {
     let keyed = KeyedAccount {
         key: CRIME_SOL_POOL,
         account: Account {
-            lamports: 2_449_920, data, owner: AMM_PROGRAM_ID,
-            executable: false, rent_epoch: 0,
+            lamports: 2_449_920,
+            data,
+            owner: AMM_PROGRAM_ID,
+            executable: false,
+            rent_epoch: 0,
         },
         params: None,
     };
@@ -90,8 +100,11 @@ fn fraud_pool_from_keyed_account_real_data() {
     let keyed = KeyedAccount {
         key: FRAUD_SOL_POOL,
         account: Account {
-            lamports: 2_449_920, data, owner: AMM_PROGRAM_ID,
-            executable: false, rent_epoch: 0,
+            lamports: 2_449_920,
+            data,
+            owner: AMM_PROGRAM_ID,
+            executable: false,
+            rent_epoch: 0,
         },
         params: None,
     };
@@ -109,8 +122,11 @@ fn crime_pool_update_with_real_data() {
     let keyed = KeyedAccount {
         key: CRIME_SOL_POOL,
         account: Account {
-            lamports: 2_449_920, data: decode_hex(CRIME_POOL_HEX), owner: AMM_PROGRAM_ID,
-            executable: false, rent_epoch: 0,
+            lamports: 2_449_920,
+            data: decode_hex(CRIME_POOL_HEX),
+            owner: AMM_PROGRAM_ID,
+            executable: false,
+            rent_epoch: 0,
         },
         params: None,
     };
@@ -119,7 +135,11 @@ fn crime_pool_update_with_real_data() {
 
     let account_map = build_account_map(vec![
         (CRIME_SOL_POOL, decode_hex(CRIME_POOL_HEX), AMM_PROGRAM_ID),
-        (EPOCH_STATE_PDA, decode_hex(EPOCH_STATE_HEX), EPOCH_PROGRAM_ID),
+        (
+            EPOCH_STATE_PDA,
+            decode_hex(EPOCH_STATE_HEX),
+            EPOCH_PROGRAM_ID,
+        ),
     ]);
 
     amm.update(&account_map).unwrap();
@@ -130,8 +150,11 @@ fn fraud_pool_update_with_real_data() {
     let keyed = KeyedAccount {
         key: FRAUD_SOL_POOL,
         account: Account {
-            lamports: 2_449_920, data: decode_hex(FRAUD_POOL_HEX), owner: AMM_PROGRAM_ID,
-            executable: false, rent_epoch: 0,
+            lamports: 2_449_920,
+            data: decode_hex(FRAUD_POOL_HEX),
+            owner: AMM_PROGRAM_ID,
+            executable: false,
+            rent_epoch: 0,
         },
         params: None,
     };
@@ -140,7 +163,11 @@ fn fraud_pool_update_with_real_data() {
 
     let account_map = build_account_map(vec![
         (FRAUD_SOL_POOL, decode_hex(FRAUD_POOL_HEX), AMM_PROGRAM_ID),
-        (EPOCH_STATE_PDA, decode_hex(EPOCH_STATE_HEX), EPOCH_PROGRAM_ID),
+        (
+            EPOCH_STATE_PDA,
+            decode_hex(EPOCH_STATE_HEX),
+            EPOCH_PROGRAM_ID,
+        ),
     ]);
 
     amm.update(&account_map).unwrap();
@@ -155,8 +182,11 @@ fn crime_pool_buy_quote_real_data() {
     let keyed = KeyedAccount {
         key: CRIME_SOL_POOL,
         account: Account {
-            lamports: 2_449_920, data: decode_hex(CRIME_POOL_HEX), owner: AMM_PROGRAM_ID,
-            executable: false, rent_epoch: 0,
+            lamports: 2_449_920,
+            data: decode_hex(CRIME_POOL_HEX),
+            owner: AMM_PROGRAM_ID,
+            executable: false,
+            rent_epoch: 0,
         },
         params: None,
     };
@@ -164,20 +194,30 @@ fn crime_pool_buy_quote_real_data() {
 
     let account_map = build_account_map(vec![
         (CRIME_SOL_POOL, decode_hex(CRIME_POOL_HEX), AMM_PROGRAM_ID),
-        (EPOCH_STATE_PDA, decode_hex(EPOCH_STATE_HEX), EPOCH_PROGRAM_ID),
+        (
+            EPOCH_STATE_PDA,
+            decode_hex(EPOCH_STATE_HEX),
+            EPOCH_PROGRAM_ID,
+        ),
     ]);
     amm.update(&account_map).unwrap();
 
-    let q = amm.quote(&QuoteParams {
-        amount: 1_000_000_000, // 1 SOL
-        input_mint: NATIVE_MINT, output_mint: CRIME_MINT,
-        swap_mode: SwapMode::ExactIn,
-        fee_mode: jupiter_amm_interface::FeeMode::Normal,
-    }).unwrap();
+    let q = amm
+        .quote(&QuoteParams {
+            amount: 1_000_000_000, // 1 SOL
+            input_mint: NATIVE_MINT,
+            output_mint: CRIME_MINT,
+            swap_mode: SwapMode::ExactIn,
+            fee_mode: jupiter_amm_interface::FeeMode::Normal,
+        })
+        .unwrap();
 
     eprintln!("CRIME buy 1 SOL: {} tokens out", q.out_amount);
     assert!(q.out_amount > 0, "Should produce tokens");
-    assert!(q.out_amount < 1_000_000_000_000, "Shouldn't exceed reasonable bounds");
+    assert!(
+        q.out_amount < 1_000_000_000_000,
+        "Shouldn't exceed reasonable bounds"
+    );
 }
 
 #[test]
@@ -185,8 +225,11 @@ fn crime_pool_sell_quote_real_data() {
     let keyed = KeyedAccount {
         key: CRIME_SOL_POOL,
         account: Account {
-            lamports: 2_449_920, data: decode_hex(CRIME_POOL_HEX), owner: AMM_PROGRAM_ID,
-            executable: false, rent_epoch: 0,
+            lamports: 2_449_920,
+            data: decode_hex(CRIME_POOL_HEX),
+            owner: AMM_PROGRAM_ID,
+            executable: false,
+            rent_epoch: 0,
         },
         params: None,
     };
@@ -194,16 +237,23 @@ fn crime_pool_sell_quote_real_data() {
 
     let account_map = build_account_map(vec![
         (CRIME_SOL_POOL, decode_hex(CRIME_POOL_HEX), AMM_PROGRAM_ID),
-        (EPOCH_STATE_PDA, decode_hex(EPOCH_STATE_HEX), EPOCH_PROGRAM_ID),
+        (
+            EPOCH_STATE_PDA,
+            decode_hex(EPOCH_STATE_HEX),
+            EPOCH_PROGRAM_ID,
+        ),
     ]);
     amm.update(&account_map).unwrap();
 
-    let q = amm.quote(&QuoteParams {
-        amount: 1_000_000, // 1 CRIME token (6 decimals)
-        input_mint: CRIME_MINT, output_mint: NATIVE_MINT,
-        swap_mode: SwapMode::ExactIn,
-        fee_mode: jupiter_amm_interface::FeeMode::Normal,
-    }).unwrap();
+    let q = amm
+        .quote(&QuoteParams {
+            amount: 1_000_000, // 1 CRIME token (6 decimals)
+            input_mint: CRIME_MINT,
+            output_mint: NATIVE_MINT,
+            swap_mode: SwapMode::ExactIn,
+            fee_mode: jupiter_amm_interface::FeeMode::Normal,
+        })
+        .unwrap();
 
     eprintln!("CRIME sell 1 token: {} lamports out", q.out_amount);
     assert!(q.out_amount > 0, "Should produce some SOL");
@@ -214,8 +264,11 @@ fn fraud_pool_buy_quote_real_data() {
     let keyed = KeyedAccount {
         key: FRAUD_SOL_POOL,
         account: Account {
-            lamports: 2_449_920, data: decode_hex(FRAUD_POOL_HEX), owner: AMM_PROGRAM_ID,
-            executable: false, rent_epoch: 0,
+            lamports: 2_449_920,
+            data: decode_hex(FRAUD_POOL_HEX),
+            owner: AMM_PROGRAM_ID,
+            executable: false,
+            rent_epoch: 0,
         },
         params: None,
     };
@@ -223,16 +276,23 @@ fn fraud_pool_buy_quote_real_data() {
 
     let account_map = build_account_map(vec![
         (FRAUD_SOL_POOL, decode_hex(FRAUD_POOL_HEX), AMM_PROGRAM_ID),
-        (EPOCH_STATE_PDA, decode_hex(EPOCH_STATE_HEX), EPOCH_PROGRAM_ID),
+        (
+            EPOCH_STATE_PDA,
+            decode_hex(EPOCH_STATE_HEX),
+            EPOCH_PROGRAM_ID,
+        ),
     ]);
     amm.update(&account_map).unwrap();
 
-    let q = amm.quote(&QuoteParams {
-        amount: 1_000_000_000,
-        input_mint: NATIVE_MINT, output_mint: FRAUD_MINT,
-        swap_mode: SwapMode::ExactIn,
-        fee_mode: jupiter_amm_interface::FeeMode::Normal,
-    }).unwrap();
+    let q = amm
+        .quote(&QuoteParams {
+            amount: 1_000_000_000,
+            input_mint: NATIVE_MINT,
+            output_mint: FRAUD_MINT,
+            swap_mode: SwapMode::ExactIn,
+            fee_mode: jupiter_amm_interface::FeeMode::Normal,
+        })
+        .unwrap();
 
     eprintln!("FRAUD buy 1 SOL: {} tokens out", q.out_amount);
     assert!(q.out_amount > 0);
@@ -243,8 +303,11 @@ fn fraud_pool_sell_quote_real_data() {
     let keyed = KeyedAccount {
         key: FRAUD_SOL_POOL,
         account: Account {
-            lamports: 2_449_920, data: decode_hex(FRAUD_POOL_HEX), owner: AMM_PROGRAM_ID,
-            executable: false, rent_epoch: 0,
+            lamports: 2_449_920,
+            data: decode_hex(FRAUD_POOL_HEX),
+            owner: AMM_PROGRAM_ID,
+            executable: false,
+            rent_epoch: 0,
         },
         params: None,
     };
@@ -252,16 +315,23 @@ fn fraud_pool_sell_quote_real_data() {
 
     let account_map = build_account_map(vec![
         (FRAUD_SOL_POOL, decode_hex(FRAUD_POOL_HEX), AMM_PROGRAM_ID),
-        (EPOCH_STATE_PDA, decode_hex(EPOCH_STATE_HEX), EPOCH_PROGRAM_ID),
+        (
+            EPOCH_STATE_PDA,
+            decode_hex(EPOCH_STATE_HEX),
+            EPOCH_PROGRAM_ID,
+        ),
     ]);
     amm.update(&account_map).unwrap();
 
-    let q = amm.quote(&QuoteParams {
-        amount: 1_000_000_000, // 1000 FRAUD tokens
-        input_mint: FRAUD_MINT, output_mint: NATIVE_MINT,
-        swap_mode: SwapMode::ExactIn,
-        fee_mode: jupiter_amm_interface::FeeMode::Normal,
-    }).unwrap();
+    let q = amm
+        .quote(&QuoteParams {
+            amount: 1_000_000_000, // 1000 FRAUD tokens
+            input_mint: FRAUD_MINT,
+            output_mint: NATIVE_MINT,
+            swap_mode: SwapMode::ExactIn,
+            fee_mode: jupiter_amm_interface::FeeMode::Normal,
+        })
+        .unwrap();
 
     eprintln!("FRAUD sell 1000 tokens: {} lamports out", q.out_amount);
     assert!(q.out_amount > 0);
@@ -274,10 +344,26 @@ fn fraud_pool_sell_quote_real_data() {
 #[test]
 fn vault_update_with_real_config() {
     let account_map = build_account_map(vec![
-        (VAULT_CONFIG_PDA, decode_hex(VAULT_CONFIG_HEX), CONVERSION_VAULT_PROGRAM_ID),
-        (VAULT_CRIME, decode_hex(VAULT_CRIME_HEX), TOKEN_2022_PROGRAM_ID),
-        (VAULT_FRAUD, decode_hex(VAULT_FRAUD_HEX), TOKEN_2022_PROGRAM_ID),
-        (VAULT_PROFIT, decode_hex(VAULT_PROFIT_HEX), TOKEN_2022_PROGRAM_ID),
+        (
+            VAULT_CONFIG_PDA,
+            decode_hex(VAULT_CONFIG_HEX),
+            CONVERSION_VAULT_PROGRAM_ID,
+        ),
+        (
+            VAULT_CRIME,
+            decode_hex(VAULT_CRIME_HEX),
+            TOKEN_2022_PROGRAM_ID,
+        ),
+        (
+            VAULT_FRAUD,
+            decode_hex(VAULT_FRAUD_HEX),
+            TOKEN_2022_PROGRAM_ID,
+        ),
+        (
+            VAULT_PROFIT,
+            decode_hex(VAULT_PROFIT_HEX),
+            TOKEN_2022_PROGRAM_ID,
+        ),
     ]);
 
     for (_, mut amm) in known_instances() {
@@ -288,10 +374,26 @@ fn vault_update_with_real_config() {
 #[test]
 fn vault_quotes_after_real_update() {
     let account_map = build_account_map(vec![
-        (VAULT_CONFIG_PDA, decode_hex(VAULT_CONFIG_HEX), CONVERSION_VAULT_PROGRAM_ID),
-        (VAULT_CRIME, decode_hex(VAULT_CRIME_HEX), TOKEN_2022_PROGRAM_ID),
-        (VAULT_FRAUD, decode_hex(VAULT_FRAUD_HEX), TOKEN_2022_PROGRAM_ID),
-        (VAULT_PROFIT, decode_hex(VAULT_PROFIT_HEX), TOKEN_2022_PROGRAM_ID),
+        (
+            VAULT_CONFIG_PDA,
+            decode_hex(VAULT_CONFIG_HEX),
+            CONVERSION_VAULT_PROGRAM_ID,
+        ),
+        (
+            VAULT_CRIME,
+            decode_hex(VAULT_CRIME_HEX),
+            TOKEN_2022_PROGRAM_ID,
+        ),
+        (
+            VAULT_FRAUD,
+            decode_hex(VAULT_FRAUD_HEX),
+            TOKEN_2022_PROGRAM_ID,
+        ),
+        (
+            VAULT_PROFIT,
+            decode_hex(VAULT_PROFIT_HEX),
+            TOKEN_2022_PROGRAM_ID,
+        ),
     ]);
 
     let venues = [
@@ -305,11 +407,15 @@ fn vault_quotes_after_real_update() {
         let mut amm = VaultAmm::new_for_testing(*input, *output);
         amm.update(&account_map).unwrap();
 
-        let q = amm.quote(&QuoteParams {
-            amount: *amount, input_mint: *input, output_mint: *output,
-            swap_mode: SwapMode::ExactIn,
-            fee_mode: jupiter_amm_interface::FeeMode::Normal,
-        }).unwrap();
+        let q = amm
+            .quote(&QuoteParams {
+                amount: *amount,
+                input_mint: *input,
+                output_mint: *output,
+                swap_mode: SwapMode::ExactIn,
+                fee_mode: jupiter_amm_interface::FeeMode::Normal,
+            })
+            .unwrap();
 
         eprintln!("{}: {} in → {} out", label, amount, q.out_amount);
         assert!(q.out_amount > 0);
@@ -321,29 +427,35 @@ fn vault_quotes_after_real_update() {
 // =============================================================================
 
 #[test]
-fn mainnet_epoch_state_transition_flag_is_false() {
-    // Safe-to-ship-early proof: on pre-gate mainnet the transition flag byte
-    // (offset 106) sits inside zeroed reserved padding, so gate-aware quoting
-    // is a no-op until the Layer-3 gate deploys. Verified against live
-    // mainnet 2026-07-18 (bytes 106..117 all zero).
+fn mainnet_epoch_state_pause_fields_are_open() {
+    // The captured upgraded EpochState is initialized and neither the manual
+    // pause nor the slot gate suppresses routing.
     let data = decode_hex(EPOCH_STATE_HEX);
-    let parsed = drfraudsworth_jupiter_adapter::state::epoch_state::ParsedEpochState::from_bytes(&data).unwrap();
-    assert!(!parsed.transition_in_progress);
+    let parsed =
+        drfraudsworth_jupiter_adapter::state::epoch_state::ParsedEpochState::from_bytes(&data)
+            .unwrap();
+    assert_eq!(parsed.pause_end_slot, 0);
+    assert!(!parsed.trading_paused);
+    assert!(parsed.initialized);
 }
 
 #[test]
 fn epoch_state_discriminator_matches_live() {
     let data = decode_hex(EPOCH_STATE_HEX);
     let live_disc = &data[0..8];
-    assert_eq!(live_disc, EPOCH_STATE_DISCRIMINATOR,
-        "Hardcoded EpochState discriminator does not match live mainnet data!");
+    assert_eq!(
+        live_disc, EPOCH_STATE_DISCRIMINATOR,
+        "Hardcoded EpochState discriminator does not match live mainnet data!"
+    );
 }
 
 #[test]
 fn epoch_state_discriminator_matches_computed() {
     let computed = compute_epoch_state_discriminator();
-    assert_eq!(computed, EPOCH_STATE_DISCRIMINATOR,
-        "Computed discriminator doesn't match hardcoded constant!");
+    assert_eq!(
+        computed, EPOCH_STATE_DISCRIMINATOR,
+        "Computed discriminator doesn't match hardcoded constant!"
+    );
 }
 
 // =============================================================================
@@ -355,8 +467,11 @@ fn get_swap_and_account_metas_buy_real_data() {
     let keyed = KeyedAccount {
         key: CRIME_SOL_POOL,
         account: Account {
-            lamports: 2_449_920, data: decode_hex(CRIME_POOL_HEX), owner: AMM_PROGRAM_ID,
-            executable: false, rent_epoch: 0,
+            lamports: 2_449_920,
+            data: decode_hex(CRIME_POOL_HEX),
+            owner: AMM_PROGRAM_ID,
+            executable: false,
+            rent_epoch: 0,
         },
         params: None,
     };
@@ -364,7 +479,11 @@ fn get_swap_and_account_metas_buy_real_data() {
 
     let account_map = build_account_map(vec![
         (CRIME_SOL_POOL, decode_hex(CRIME_POOL_HEX), AMM_PROGRAM_ID),
-        (EPOCH_STATE_PDA, decode_hex(EPOCH_STATE_HEX), EPOCH_PROGRAM_ID),
+        (
+            EPOCH_STATE_PDA,
+            decode_hex(EPOCH_STATE_HEX),
+            EPOCH_PROGRAM_ID,
+        ),
     ]);
     amm.update(&account_map).unwrap();
 
@@ -372,26 +491,31 @@ fn get_swap_and_account_metas_buy_real_data() {
     let user_wsol = Pubkey::new_unique();
     let user_token = Pubkey::new_unique();
 
-    let result = amm.get_swap_and_account_metas(&jupiter_amm_interface::SwapParams {
-        swap_mode: SwapMode::ExactIn,
-        in_amount: 1_000_000_000,
-        out_amount: 0,
-        source_mint: NATIVE_MINT,
-        destination_mint: CRIME_MINT,
-        source_token_account: user_wsol,
-        destination_token_account: user_token,
-        token_transfer_authority: user,
-        user: solana_sdk::pubkey::Pubkey::default(),
-        payer: solana_sdk::pubkey::Pubkey::default(),
-        quote_mint_to_referrer: None,
-        jupiter_program_id: &Pubkey::new_unique(),
-        missing_dynamic_accounts_as_default: false,
-    }).unwrap();
+    let result = amm
+        .get_swap_and_account_metas(&jupiter_amm_interface::SwapParams {
+            swap_mode: SwapMode::ExactIn,
+            in_amount: 1_000_000_000,
+            out_amount: 0,
+            source_mint: NATIVE_MINT,
+            destination_mint: CRIME_MINT,
+            source_token_account: user_wsol,
+            destination_token_account: user_token,
+            token_transfer_authority: user,
+            quote_mint_to_referrer: None,
+            jupiter_program_id: &Pubkey::new_unique(),
+            missing_dynamic_accounts_as_default: false,
+            user: solana_sdk::pubkey::Pubkey::default(),
+            payer: solana_sdk::pubkey::Pubkey::default(),
+        })
+        .unwrap();
 
     assert_eq!(result.account_metas.len(), 24, "Buy: 20 named + 4 hook");
     assert_eq!(result.account_metas[0].pubkey, user);
     assert!(result.account_metas[0].is_signer);
-    eprintln!("Generated mainnet buy instruction: {} accounts", result.account_metas.len());
+    eprintln!(
+        "Generated mainnet buy instruction: {} accounts",
+        result.account_metas.len()
+    );
 }
 
 // =============================================================================
@@ -415,8 +539,11 @@ fn real_data_metas_equal_constant_builder_metas() {
         let keyed = KeyedAccount {
             key: pool_key,
             account: Account {
-                lamports: 2_449_920, data: decode_hex(pool_hex), owner: AMM_PROGRAM_ID,
-                executable: false, rent_epoch: 0,
+                lamports: 2_449_920,
+                data: decode_hex(pool_hex),
+                owner: AMM_PROGRAM_ID,
+                executable: false,
+                rent_epoch: 0,
             },
             params: None,
         };
@@ -428,41 +555,53 @@ fn real_data_metas_equal_constant_builder_metas() {
         let jup = Pubkey::new_unique();
 
         // Buy direction
-        let generic = amm.get_swap_and_account_metas(&jupiter_amm_interface::SwapParams {
-            swap_mode: SwapMode::ExactIn,
-            in_amount: 1_000_000_000,
-            out_amount: 0,
-            source_mint: NATIVE_MINT,
-            destination_mint: token_mint,
-            source_token_account: wsol_ata,
-            destination_token_account: token_ata,
-            token_transfer_authority: user,
-            user: solana_sdk::pubkey::Pubkey::default(),
-            payer: solana_sdk::pubkey::Pubkey::default(),
-            quote_mint_to_referrer: None,
-            jupiter_program_id: &jup,
-            missing_dynamic_accounts_as_default: false,
-        }).unwrap().account_metas;
+        let generic = amm
+            .get_swap_and_account_metas(&jupiter_amm_interface::SwapParams {
+                swap_mode: SwapMode::ExactIn,
+                in_amount: 1_000_000_000,
+                out_amount: 0,
+                source_mint: NATIVE_MINT,
+                destination_mint: token_mint,
+                source_token_account: wsol_ata,
+                destination_token_account: token_ata,
+                token_transfer_authority: user,
+                quote_mint_to_referrer: None,
+                jupiter_program_id: &jup,
+                missing_dynamic_accounts_as_default: false,
+                user: solana_sdk::pubkey::Pubkey::default(),
+                payer: solana_sdk::pubkey::Pubkey::default(),
+            })
+            .unwrap()
+            .account_metas;
         let wrapper = build_buy_account_metas(&user, &wsol_ata, &token_ata, is_crime);
-        assert_eq!(generic, wrapper, "buy metas from mainnet data must equal constant-based metas");
+        assert_eq!(
+            generic, wrapper,
+            "buy metas from mainnet data must equal constant-based metas"
+        );
 
         // Sell direction
-        let generic = amm.get_swap_and_account_metas(&jupiter_amm_interface::SwapParams {
-            swap_mode: SwapMode::ExactIn,
-            in_amount: 1_000_000_000,
-            out_amount: 0,
-            source_mint: token_mint,
-            destination_mint: NATIVE_MINT,
-            source_token_account: token_ata,
-            destination_token_account: wsol_ata,
-            token_transfer_authority: user,
-            user: solana_sdk::pubkey::Pubkey::default(),
-            payer: solana_sdk::pubkey::Pubkey::default(),
-            quote_mint_to_referrer: None,
-            jupiter_program_id: &jup,
-            missing_dynamic_accounts_as_default: false,
-        }).unwrap().account_metas;
+        let generic = amm
+            .get_swap_and_account_metas(&jupiter_amm_interface::SwapParams {
+                swap_mode: SwapMode::ExactIn,
+                in_amount: 1_000_000_000,
+                out_amount: 0,
+                source_mint: token_mint,
+                destination_mint: NATIVE_MINT,
+                source_token_account: token_ata,
+                destination_token_account: wsol_ata,
+                token_transfer_authority: user,
+                quote_mint_to_referrer: None,
+                jupiter_program_id: &jup,
+                missing_dynamic_accounts_as_default: false,
+                user: solana_sdk::pubkey::Pubkey::default(),
+                payer: solana_sdk::pubkey::Pubkey::default(),
+            })
+            .unwrap()
+            .account_metas;
         let wrapper = build_sell_account_metas(&user, &token_ata, &wsol_ata, is_crime);
-        assert_eq!(generic, wrapper, "sell metas from mainnet data must equal constant-based metas");
+        assert_eq!(
+            generic, wrapper,
+            "sell metas from mainnet data must equal constant-based metas"
+        );
     }
 }

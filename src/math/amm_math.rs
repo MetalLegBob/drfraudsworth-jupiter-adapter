@@ -63,10 +63,8 @@ pub fn verify_k_invariant(
     reserve_in_after: u64,
     reserve_out_after: u64,
 ) -> Option<bool> {
-    let k_before = (reserve_in_before as u128)
-        .checked_mul(reserve_out_before as u128)?;
-    let k_after = (reserve_in_after as u128)
-        .checked_mul(reserve_out_after as u128)?;
+    let k_before = (reserve_in_before as u128).checked_mul(reserve_out_before as u128)?;
+    let k_after = (reserve_in_after as u128).checked_mul(reserve_out_after as u128)?;
     Some(k_after >= k_before)
 }
 

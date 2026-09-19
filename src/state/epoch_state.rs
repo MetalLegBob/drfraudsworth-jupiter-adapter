@@ -18,9 +18,12 @@
 //   ... remaining fields not needed for quoting
 
 use anyhow::{anyhow, Result};
-use sha2::{Sha256, Digest};
+use sha2::{Digest, Sha256};
 
-use crate::constants::{EPOCH_STATE_DISCRIMINATOR, TRANSITION_IN_PROGRESS_OFFSET};
+use crate::constants::{
+    EPOCH_INITIALIZED_OFFSET, EPOCH_STATE_DISCRIMINATOR, PAUSE_END_SLOT_OFFSET,
+    TRADING_PAUSED_OFFSET,
+};
 
 /// Minimum account data length for EpochState (8 discriminator + 164 data).
 const MIN_LEN: usize = 172;
@@ -32,11 +35,11 @@ pub struct ParsedEpochState {
     pub crime_sell_tax_bps: u16,
     pub fraud_buy_tax_bps: u16,
     pub fraud_sell_tax_bps: u16,
-    /// Whether an epoch transition window is open (byte 106). While true, the
-    /// AMM's Layer-3 gate reverts public swaps with TransitionInProgress
-    /// (6019); quotes should be refused so the router never routes into a
-    /// known-closed window. False on pre-gate deployments (reserved padding).
-    pub transition_in_progress: bool,
+    /// Inclusive slot gate: swaps are allowed when clock.slot >= this value.
+    pub pause_end_slot: u64,
+    /// Manual operator pause, checked before the slot gate on-chain.
+    pub trading_paused: bool,
+    pub initialized: bool,
 }
 
 impl ParsedEpochState {
@@ -48,9 +51,9 @@ impl ParsedEpochState {
     ///
     /// Extracts u16 LE fields at proven offsets.
     pub fn from_bytes(data: &[u8]) -> Result<Self> {
-        if data.len() < MIN_LEN {
+        if data.len() != MIN_LEN {
             return Err(anyhow!(
-                "EpochState data too short: {} bytes (need {})",
+                "EpochState data length mismatch: {} bytes (need exactly {})",
                 data.len(),
                 MIN_LEN
             ));
@@ -66,12 +69,26 @@ impl ParsedEpochState {
             ));
         }
 
+        let parse_bool = |offset: usize, name: &str| -> Result<bool> {
+            match data[offset] {
+                0 => Ok(false),
+                1 => Ok(true),
+                value => Err(anyhow!("invalid EpochState {name} byte {value}")),
+            }
+        };
+
         Ok(Self {
             crime_buy_tax_bps: u16::from_le_bytes([data[33], data[34]]),
             crime_sell_tax_bps: u16::from_le_bytes([data[35], data[36]]),
             fraud_buy_tax_bps: u16::from_le_bytes([data[37], data[38]]),
             fraud_sell_tax_bps: u16::from_le_bytes([data[39], data[40]]),
-            transition_in_progress: data[TRANSITION_IN_PROGRESS_OFFSET] != 0,
+            pause_end_slot: u64::from_le_bytes(
+                data[PAUSE_END_SLOT_OFFSET..PAUSE_END_SLOT_OFFSET + 8]
+                    .try_into()
+                    .map_err(|_| anyhow!("failed to parse EpochState pause_end_slot"))?,
+            ),
+            trading_paused: parse_bool(TRADING_PAUSED_OFFSET, "trading_paused")?,
+            initialized: parse_bool(EPOCH_INITIALIZED_OFFSET, "initialized")?,
         })
     }
 
@@ -126,6 +143,7 @@ mod tests {
         data[35..37].copy_from_slice(&crime_sell.to_le_bytes());
         data[37..39].copy_from_slice(&fraud_buy.to_le_bytes());
         data[39..41].copy_from_slice(&fraud_sell.to_le_bytes());
+        data[EPOCH_INITIALIZED_OFFSET] = 1;
 
         data
     }
@@ -152,10 +170,10 @@ mod tests {
         let data = mock_epoch_state(300, 1200, 1500, 500);
         let parsed = ParsedEpochState::from_bytes(&data).unwrap();
 
-        assert_eq!(parsed.get_tax_bps(true, true), 300);   // CRIME buy
-        assert_eq!(parsed.get_tax_bps(true, false), 1200);  // CRIME sell
-        assert_eq!(parsed.get_tax_bps(false, true), 1500);  // FRAUD buy
-        assert_eq!(parsed.get_tax_bps(false, false), 500);  // FRAUD sell
+        assert_eq!(parsed.get_tax_bps(true, true), 300); // CRIME buy
+        assert_eq!(parsed.get_tax_bps(true, false), 1200); // CRIME sell
+        assert_eq!(parsed.get_tax_bps(false, true), 1500); // FRAUD buy
+        assert_eq!(parsed.get_tax_bps(false, false), 500); // FRAUD sell
     }
 
     #[test]
@@ -165,20 +183,18 @@ mod tests {
     }
 
     #[test]
-    fn transition_flag_reads_exactly_byte_106() {
-        // Offset-pin: only byte 106 controls the flag. Adjacent bytes set
-        // with 106 clear must read false; 106 set must read true.
+    fn pause_fields_read_exact_offsets() {
         let mut data = mock_epoch_state(100, 1100, 1100, 100);
-        data[105] = 1;
-        data[107] = 1;
-        assert!(!ParsedEpochState::from_bytes(&data).unwrap().transition_in_progress);
+        let slot = 0xABCD_EF01_2345_6789u64;
+        data[PAUSE_END_SLOT_OFFSET..PAUSE_END_SLOT_OFFSET + 8].copy_from_slice(&slot.to_le_bytes());
+        data[TRADING_PAUSED_OFFSET] = 1;
+        let parsed = ParsedEpochState::from_bytes(&data).unwrap();
+        assert_eq!(parsed.pause_end_slot, slot);
+        assert!(parsed.trading_paused);
+        assert!(parsed.initialized);
 
-        data[106] = 1;
-        assert!(ParsedEpochState::from_bytes(&data).unwrap().transition_in_progress);
-
-        // Any non-zero value counts as open (mirrors the on-chain `!= 0`).
-        data[106] = 0xFF;
-        assert!(ParsedEpochState::from_bytes(&data).unwrap().transition_in_progress);
+        data[TRADING_PAUSED_OFFSET] = 2;
+        assert!(ParsedEpochState::from_bytes(&data).is_err());
     }
 
     #[test]
@@ -200,7 +216,12 @@ mod tests {
         assert_eq!(parsed.crime_sell_tax_bps, 1200);
         assert_eq!(parsed.fraud_buy_tax_bps, 1200);
         assert_eq!(parsed.fraud_sell_tax_bps, 300);
-        assert!(!parsed.transition_in_progress, "snapshot taken between transitions");
+        // This historical snapshot predates the upgraded carve. Its former
+        // transition bytes decode deterministically but are not used as a
+        // current-layout pause fixture.
+        assert_eq!(parsed.pause_end_slot, 0);
+        assert!(!parsed.trading_paused);
+        assert!(parsed.initialized);
     }
 
     #[test]

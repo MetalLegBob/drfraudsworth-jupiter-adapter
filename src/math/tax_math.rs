@@ -22,9 +22,7 @@ pub fn calculate_tax(amount_lamports: u64, tax_bps: u16) -> Option<u64> {
     let amount = amount_lamports as u128;
     let bps = tax_bps as u128;
 
-    let tax = amount
-        .checked_mul(bps)?
-        .checked_div(10_000)?;
+    let tax = amount.checked_mul(bps)?.checked_div(10_000)?;
 
     u64::try_from(tax).ok()
 }
@@ -57,9 +55,7 @@ pub fn split_distribution(total_tax: u64) -> Option<(u64, u64, u64)> {
     let carnage_u128 = total.checked_mul(CARNAGE_BPS)?.checked_div(BPS_DENOM)?;
     let carnage = u64::try_from(carnage_u128).ok()?;
 
-    let treasury = total_tax
-        .checked_sub(staking)?
-        .checked_sub(carnage)?;
+    let treasury = total_tax.checked_sub(staking)?.checked_sub(carnage)?;
 
     Some((staking, carnage, treasury))
 }
@@ -158,7 +154,9 @@ mod tests {
         assert!(result.is_some());
         let (staking, carnage, treasury) = result.unwrap();
         assert_eq!(
-            staking.checked_add(carnage).and_then(|s| s.checked_add(treasury)),
+            staking
+                .checked_add(carnage)
+                .and_then(|s| s.checked_add(treasury)),
             Some(u64::MAX),
         );
     }

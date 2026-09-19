@@ -1,6 +1,7 @@
 // Raw byte parser for AMM PoolState account data.
 //
-// Extracts mints, vaults, reserves, and lp_fee_bps from on-chain PoolState
+// Extracts the complete on-chain PoolState needed by generic discovery:
+// mints, vaults, reserves, fee, lifecycle flags, bumps, and token programs.
 // without anchor-lang dependency. Byte offsets verified against
 // programs/tax-program/src/helpers/pool_reader.rs and against embedded
 // mainnet account data (tests/test_mainnet_validation.rs).
@@ -15,6 +16,13 @@
 //   [137..145] reserve_a (u64, 8 bytes)
 //   [145..153] reserve_b (u64, 8 bytes)
 //   [153..155] lp_fee_bps (u16, 2 bytes)
+//   [155]      initialized (bool)
+//   [156]      locked (bool)
+//   [157]      pool bump
+//   [158]      vault A bump
+//   [159]      vault B bump
+//   [160..192] token_program_a
+//   [192..224] token_program_b
 //
 // Mint ordering: the on-chain AMM stores mints in canonical byte order
 // (mint_a < mint_b), so SOL may be on either side. All orientation-sensitive
@@ -27,8 +35,8 @@ use solana_sdk::pubkey::Pubkey;
 use crate::accounts::addresses::NATIVE_MINT;
 use crate::constants::POOL_STATE_DISCRIMINATOR;
 
-/// Minimum account data length for PoolState (need through lp_fee_bps).
-const MIN_LEN: usize = 155;
+/// Exact deployed PoolState account length (8-byte discriminator + 216 data).
+pub const POOL_STATE_LEN: usize = 224;
 
 /// Parsed PoolState -- full field set, enabling generic pool construction
 /// from account data alone (no hardcoded per-pool constants).
@@ -41,6 +49,13 @@ pub struct ParsedPoolState {
     pub reserve_a: u64,
     pub reserve_b: u64,
     pub lp_fee_bps: u16,
+    pub initialized: bool,
+    pub locked: bool,
+    pub bump: u8,
+    pub vault_a_bump: u8,
+    pub vault_b_bump: u8,
+    pub token_program_a: Pubkey,
+    pub token_program_b: Pubkey,
 }
 
 impl ParsedPoolState {
@@ -55,11 +70,11 @@ impl ParsedPoolState {
     /// scan): non-PoolState accounts (AdminConfig, etc.) are rejected
     /// instead of mis-parsed.
     pub fn from_bytes(data: &[u8]) -> Result<Self> {
-        if data.len() < MIN_LEN {
+        if data.len() != POOL_STATE_LEN {
             return Err(anyhow!(
-                "PoolState data too short: {} bytes (need {})",
+                "PoolState data length mismatch: {} bytes (need exactly {})",
                 data.len(),
-                MIN_LEN
+                POOL_STATE_LEN
             ));
         }
 
@@ -82,14 +97,31 @@ impl ParsedPoolState {
             vault_a: pubkey_at(73..105)?,
             vault_b: pubkey_at(105..137)?,
             reserve_a: u64::from_le_bytes(
-                data[137..145].try_into()
-                    .map_err(|_| anyhow!("Failed to parse reserve_a from bytes [137..145]"))?
+                data[137..145]
+                    .try_into()
+                    .map_err(|_| anyhow!("Failed to parse reserve_a from bytes [137..145]"))?,
             ),
             reserve_b: u64::from_le_bytes(
-                data[145..153].try_into()
-                    .map_err(|_| anyhow!("Failed to parse reserve_b from bytes [145..153]"))?
+                data[145..153]
+                    .try_into()
+                    .map_err(|_| anyhow!("Failed to parse reserve_b from bytes [145..153]"))?,
             ),
             lp_fee_bps: u16::from_le_bytes([data[153], data[154]]),
+            initialized: match data[155] {
+                0 => false,
+                1 => true,
+                value => return Err(anyhow!("invalid PoolState initialized byte {value}")),
+            },
+            locked: match data[156] {
+                0 => false,
+                1 => true,
+                value => return Err(anyhow!("invalid PoolState locked byte {value}")),
+            },
+            bump: data[157],
+            vault_a_bump: data[158],
+            vault_b_bump: data[159],
+            token_program_a: pubkey_at(160..192)?,
+            token_program_b: pubkey_at(192..224)?,
         })
     }
 
@@ -152,7 +184,7 @@ pub(crate) mod tests {
         reserve_b: u64,
         lp_fee_bps: u16,
     ) -> Vec<u8> {
-        let mut data = vec![0u8; 224]; // Full PoolState size
+        let mut data = vec![0u8; POOL_STATE_LEN];
 
         data[0..8].copy_from_slice(&POOL_STATE_DISCRIMINATOR);
         // [8] pool_type = 0 (MixedPool)
@@ -164,6 +196,20 @@ pub(crate) mod tests {
         data[137..145].copy_from_slice(&reserve_a.to_le_bytes());
         data[145..153].copy_from_slice(&reserve_b.to_le_bytes());
         data[153..155].copy_from_slice(&lp_fee_bps.to_le_bytes());
+        data[155] = 1;
+        data[156] = 0;
+        data[157] = 254;
+        data[158] = 253;
+        data[159] = 252;
+        let token_program_for = |mint: &Pubkey| {
+            if *mint == NATIVE_MINT {
+                crate::accounts::addresses::SPL_TOKEN_PROGRAM_ID
+            } else {
+                crate::accounts::addresses::TOKEN_2022_PROGRAM_ID
+            }
+        };
+        data[160..192].copy_from_slice(token_program_for(mint_a).as_ref());
+        data[192..224].copy_from_slice(token_program_for(mint_b).as_ref());
 
         data
     }
@@ -186,7 +232,15 @@ pub(crate) mod tests {
         // mint_a = NATIVE_MINT (SOL), so reserve_a = SOL, reserve_b = token
         let token = Pubkey::new_unique();
         let (va, vb) = (Pubkey::new_unique(), Pubkey::new_unique());
-        let data = mock_pool_state(&NATIVE_MINT, &token, &va, &vb, 100_000_000, 500_000_000, 100);
+        let data = mock_pool_state(
+            &NATIVE_MINT,
+            &token,
+            &va,
+            &vb,
+            100_000_000,
+            500_000_000,
+            100,
+        );
         let parsed = ParsedPoolState::from_bytes(&data).unwrap();
 
         assert_eq!(parsed.mint_a, NATIVE_MINT);
@@ -196,6 +250,16 @@ pub(crate) mod tests {
         assert_eq!(parsed.reserve_a, 100_000_000);
         assert_eq!(parsed.reserve_b, 500_000_000);
         assert_eq!(parsed.lp_fee_bps, 100);
+        assert!(parsed.initialized);
+        assert!(!parsed.locked);
+        assert_eq!(
+            parsed.token_program_a,
+            crate::accounts::addresses::SPL_TOKEN_PROGRAM_ID
+        );
+        assert_eq!(
+            parsed.token_program_b,
+            crate::accounts::addresses::TOKEN_2022_PROGRAM_ID
+        );
 
         assert!(parsed.is_sol_pool());
         assert_eq!(parsed.token_mint(), Some(token));
@@ -208,7 +272,15 @@ pub(crate) mod tests {
         // mint_a != NATIVE_MINT, so reserves/vaults are reversed
         let token = Pubkey::new_unique();
         let (va, vb) = (Pubkey::new_unique(), Pubkey::new_unique());
-        let data = mock_pool_state(&token, &NATIVE_MINT, &va, &vb, 500_000_000, 100_000_000, 100);
+        let data = mock_pool_state(
+            &token,
+            &NATIVE_MINT,
+            &va,
+            &vb,
+            500_000_000,
+            100_000_000,
+            100,
+        );
         let parsed = ParsedPoolState::from_bytes(&data).unwrap();
 
         assert!(parsed.is_sol_pool());
@@ -221,7 +293,15 @@ pub(crate) mod tests {
     #[test]
     fn non_sol_pool_has_no_token_mint() {
         let (m1, m2) = (Pubkey::new_unique(), Pubkey::new_unique());
-        let data = mock_pool_state(&m1, &m2, &Pubkey::new_unique(), &Pubkey::new_unique(), 1, 1, 100);
+        let data = mock_pool_state(
+            &m1,
+            &m2,
+            &Pubkey::new_unique(),
+            &Pubkey::new_unique(),
+            1,
+            1,
+            100,
+        );
         let parsed = ParsedPoolState::from_bytes(&data).unwrap();
 
         assert!(!parsed.is_sol_pool());
@@ -238,7 +318,13 @@ pub(crate) mod tests {
     fn reject_wrong_discriminator() {
         let token = Pubkey::new_unique();
         let mut data = mock_pool_state(
-            &NATIVE_MINT, &token, &Pubkey::new_unique(), &Pubkey::new_unique(), 1, 1, 100,
+            &NATIVE_MINT,
+            &token,
+            &Pubkey::new_unique(),
+            &Pubkey::new_unique(),
+            1,
+            1,
+            100,
         );
         data[0] ^= 0xFF;
         let err = ParsedPoolState::from_bytes(&data).unwrap_err();
@@ -249,7 +335,13 @@ pub(crate) mod tests {
     fn lp_fee_parsed_correctly() {
         let token = Pubkey::new_unique();
         let data = mock_pool_state(
-            &NATIVE_MINT, &token, &Pubkey::new_unique(), &Pubkey::new_unique(), 1, 1, 50,
+            &NATIVE_MINT,
+            &token,
+            &Pubkey::new_unique(),
+            &Pubkey::new_unique(),
+            1,
+            1,
+            50,
         );
         let parsed = ParsedPoolState::from_bytes(&data).unwrap();
         assert_eq!(parsed.lp_fee_bps, 50);

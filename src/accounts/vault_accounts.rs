@@ -10,8 +10,8 @@
 use solana_sdk::{instruction::AccountMeta, pubkey::Pubkey};
 
 use super::addresses::{
-    CRIME_MINT, FRAUD_MINT, PROFIT_MINT, TOKEN_2022_PROGRAM_ID,
-    VAULT_CONFIG_PDA, VAULT_CRIME, VAULT_FRAUD, VAULT_PROFIT,
+    CRIME_MINT, FRAUD_MINT, PROFIT_MINT, TOKEN_2022_PROGRAM_ID, VAULT_CONFIG_PDA, VAULT_CRIME,
+    VAULT_FRAUD, VAULT_PROFIT,
 };
 use super::hook_accounts::hook_metas_for_mint;
 
@@ -100,16 +100,15 @@ mod tests {
         let user_input = Pubkey::new_unique();
         let user_output = Pubkey::new_unique();
 
-        let metas = build_vault_account_metas(
-            &user,
-            &user_input,
-            &user_output,
-            &CRIME_MINT,
-            &PROFIT_MINT,
-        );
+        let metas =
+            build_vault_account_metas(&user, &user_input, &user_output, &CRIME_MINT, &PROFIT_MINT);
 
         // 9 named + 4 input hooks + 4 output hooks = 17
-        assert_eq!(metas.len(), 17, "vault should have 9 named + 8 hook accounts");
+        assert_eq!(
+            metas.len(),
+            17,
+            "vault should have 9 named + 8 hook accounts"
+        );
     }
 
     #[test]
@@ -118,13 +117,8 @@ mod tests {
         let user_input = Pubkey::new_unique();
         let user_output = Pubkey::new_unique();
 
-        let metas = build_vault_account_metas(
-            &user,
-            &user_input,
-            &user_output,
-            &CRIME_MINT,
-            &PROFIT_MINT,
-        );
+        let metas =
+            build_vault_account_metas(&user, &user_input, &user_output, &CRIME_MINT, &PROFIT_MINT);
 
         // 1. user (signer)
         assert_eq!(metas[0].pubkey, user);
@@ -178,13 +172,8 @@ mod tests {
         let user_input = Pubkey::new_unique();
         let user_output = Pubkey::new_unique();
 
-        let metas = build_vault_account_metas(
-            &user,
-            &user_input,
-            &user_output,
-            &PROFIT_MINT,
-            &CRIME_MINT,
-        );
+        let metas =
+            build_vault_account_metas(&user, &user_input, &user_output, &PROFIT_MINT, &CRIME_MINT);
 
         // vault_input = VAULT_PROFIT (holds PROFIT)
         assert_eq!(metas[6].pubkey, VAULT_PROFIT);

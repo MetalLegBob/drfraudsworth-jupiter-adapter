@@ -14,8 +14,8 @@
 
 use anyhow::{anyhow, Result};
 use jupiter_amm_interface::{
-    AccountMap, Amm, AmmContext, KeyedAccount, Quote, QuoteParams, Swap, SwapAndAccountMetas,
-    SwapMode, SwapParams, try_get_account_data,
+    try_get_account_data, AccountMap, Amm, AmmContext, KeyedAccount, Quote, QuoteParams, Swap,
+    SwapAndAccountMetas, SwapMode, SwapParams,
 };
 use rust_decimal::Decimal;
 use solana_sdk::pubkey::Pubkey;
@@ -160,20 +160,17 @@ impl Amm for VaultAmm {
             ));
         }
 
-        let out_amount = compute_vault_output(
-            &self.input_mint,
-            &self.output_mint,
-            quote_params.amount,
-        )
-        .ok_or_else(|| {
-            anyhow!(
-                "Vault conversion failed for {} -> {} with amount {}. \
+        let out_amount =
+            compute_vault_output(&self.input_mint, &self.output_mint, quote_params.amount)
+                .ok_or_else(|| {
+                    anyhow!(
+                        "Vault conversion failed for {} -> {} with amount {}. \
                  Possible causes: zero amount, dust too small (< 100 for divide), or overflow.",
-                self.input_mint,
-                self.output_mint,
-                quote_params.amount
-            )
-        })?;
+                        self.input_mint,
+                        self.output_mint,
+                        quote_params.amount
+                    )
+                })?;
 
         // Cap at the liquidity the vault can actually pay out.
         if out_amount > self.output_vault_balance {
@@ -293,8 +290,7 @@ pub fn known_instances() -> Vec<(Pubkey, VaultAmm)> {
                 input_mint: *input,
                 output_mint: *output,
                 _label_suffix: label.to_string(),
-                output_vault: vault_for_mint(output)
-                    .expect("known instances use protocol mints"),
+                output_vault: vault_for_mint(output).expect("known instances use protocol mints"),
                 output_vault_balance: u64::MAX,
             };
             (key, instance)
@@ -562,11 +558,17 @@ mod tests {
 
         // CRIME -> PROFIT consumes the PROFIT vault
         let (_, amm) = &instances[0];
-        assert_eq!(amm.get_accounts_to_update(), vec![VAULT_CONFIG_PDA, VAULT_PROFIT]);
+        assert_eq!(
+            amm.get_accounts_to_update(),
+            vec![VAULT_CONFIG_PDA, VAULT_PROFIT]
+        );
 
         // PROFIT -> CRIME consumes the CRIME vault
         let (_, amm) = &instances[2];
-        assert_eq!(amm.get_accounts_to_update(), vec![VAULT_CONFIG_PDA, VAULT_CRIME]);
+        assert_eq!(
+            amm.get_accounts_to_update(),
+            vec![VAULT_CONFIG_PDA, VAULT_CRIME]
+        );
     }
 
     #[test]
@@ -625,20 +627,26 @@ mod tests {
         let mut amm = VaultAmm::new_for_testing(CRIME_MINT, PROFIT_MINT);
 
         let mut map = AccountMap::default();
-        map.insert(VAULT_CONFIG_PDA, Account {
-            lamports: 1_000_000,
-            data: vec![1u8; 9],
-            owner: CONVERSION_VAULT_PROGRAM_ID,
-            executable: false,
-            rent_epoch: 0,
-        });
-        map.insert(VAULT_PROFIT, Account {
-            lamports: 1_000_000,
-            data: mock_token_account(&PROFIT_MINT, &Pubkey::new_unique(), 500),
-            owner: crate::accounts::addresses::TOKEN_2022_PROGRAM_ID,
-            executable: false,
-            rent_epoch: 0,
-        });
+        map.insert(
+            VAULT_CONFIG_PDA,
+            Account {
+                lamports: 1_000_000,
+                data: vec![1u8; 9],
+                owner: CONVERSION_VAULT_PROGRAM_ID,
+                executable: false,
+                rent_epoch: 0,
+            },
+        );
+        map.insert(
+            VAULT_PROFIT,
+            Account {
+                lamports: 1_000_000,
+                data: mock_token_account(&PROFIT_MINT, &Pubkey::new_unique(), 500),
+                owner: crate::accounts::addresses::TOKEN_2022_PROGRAM_ID,
+                executable: false,
+                rent_epoch: 0,
+            },
+        );
 
         amm.update(&map).unwrap();
 

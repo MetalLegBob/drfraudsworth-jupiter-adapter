@@ -3,21 +3,25 @@
 // Adapted from Titan adapter's test_construction.rs.
 // Tests the Jupiter Amm lifecycle with mock AccountMap data.
 
-use jupiter_amm_interface::{AccountMap, Amm, AmmContext, ClockRef, KeyedAccount, QuoteParams, SwapMode};
+use jupiter_amm_interface::{
+    AccountMap, Amm, AmmContext, ClockRef, KeyedAccount, QuoteParams, SwapMode,
+};
 use solana_sdk::account::Account;
 use solana_sdk::pubkey::Pubkey;
 
 use drfraudsworth_jupiter_adapter::accounts::addresses::*;
 use drfraudsworth_jupiter_adapter::constants::*;
 use drfraudsworth_jupiter_adapter::sol_pool_amm::SolPoolAmm;
-use drfraudsworth_jupiter_adapter::vault_amm::{VaultAmm, known_instances};
+use drfraudsworth_jupiter_adapter::vault_amm::{known_instances, VaultAmm};
 
 // =============================================================================
 // Mock data builders
 // =============================================================================
 
 fn amm_context() -> AmmContext {
-    AmmContext { clock_ref: ClockRef::default() }
+    AmmContext {
+        clock_ref: ClockRef::default(),
+    }
 }
 
 fn mock_pool_state_bytes(
@@ -29,7 +33,7 @@ fn mock_pool_state_bytes(
     let mut data = vec![0u8; 224];
     data[0..8].copy_from_slice(&POOL_STATE_DISCRIMINATOR);
     data[8] = 0; // pool_type
-    // Mainnet orientation: mint_a = WSOL, mint_b = token
+                 // Mainnet orientation: mint_a = WSOL, mint_b = token
     data[9..41].copy_from_slice(NATIVE_MINT.as_ref());
     data[41..73].copy_from_slice(token_mint.as_ref());
     data[73..105].copy_from_slice(Pubkey::new_unique().as_ref()); // vault_a
@@ -37,6 +41,10 @@ fn mock_pool_state_bytes(
     data[137..145].copy_from_slice(&reserve_sol.to_le_bytes());
     data[145..153].copy_from_slice(&reserve_token.to_le_bytes());
     data[153..155].copy_from_slice(&lp_fee_bps.to_le_bytes());
+    data[155] = 1; // initialized
+    data[156] = 0; // unlocked
+    data[160..192].copy_from_slice(SPL_TOKEN_PROGRAM_ID.as_ref());
+    data[192..224].copy_from_slice(TOKEN_2022_PROGRAM_ID.as_ref());
     data
 }
 
@@ -52,15 +60,23 @@ fn mock_epoch_state_bytes(
     data[35..37].copy_from_slice(&crime_sell.to_le_bytes());
     data[37..39].copy_from_slice(&fraud_buy.to_le_bytes());
     data[39..41].copy_from_slice(&fraud_sell.to_le_bytes());
+    data[170] = 1; // initialized
     data
 }
 
 fn build_account_map(entries: Vec<(Pubkey, Vec<u8>, Pubkey)>) -> AccountMap {
     let mut map = AccountMap::default();
     for (key, data, owner) in entries {
-        map.insert(key, Account {
-            lamports: 1_000_000, data, owner, executable: false, rent_epoch: 0,
-        });
+        map.insert(
+            key,
+            Account {
+                lamports: 1_000_000,
+                data,
+                owner,
+                executable: false,
+                rent_epoch: 0,
+            },
+        );
     }
     map
 }
@@ -75,8 +91,11 @@ fn sol_pool_from_keyed_account_crime() {
     let keyed = KeyedAccount {
         key: CRIME_SOL_POOL,
         account: Account {
-            lamports: 1_000_000, data: pool_data, owner: AMM_PROGRAM_ID,
-            executable: false, rent_epoch: 0,
+            lamports: 1_000_000,
+            data: pool_data,
+            owner: AMM_PROGRAM_ID,
+            executable: false,
+            rent_epoch: 0,
         },
         params: None,
     };
@@ -92,8 +111,11 @@ fn sol_pool_from_keyed_account_fraud() {
     let keyed = KeyedAccount {
         key: FRAUD_SOL_POOL,
         account: Account {
-            lamports: 1_000_000, data: pool_data, owner: AMM_PROGRAM_ID,
-            executable: false, rent_epoch: 0,
+            lamports: 1_000_000,
+            data: pool_data,
+            owner: AMM_PROGRAM_ID,
+            executable: false,
+            rent_epoch: 0,
         },
         params: None,
     };
@@ -107,8 +129,11 @@ fn sol_pool_from_keyed_account_rejects_short_data() {
     let keyed = KeyedAccount {
         key: CRIME_SOL_POOL,
         account: Account {
-            lamports: 1_000_000, data: vec![0u8; 50], owner: AMM_PROGRAM_ID,
-            executable: false, rent_epoch: 0,
+            lamports: 1_000_000,
+            data: vec![0u8; 50],
+            owner: AMM_PROGRAM_ID,
+            executable: false,
+            rent_epoch: 0,
         },
         params: None,
     };
@@ -127,8 +152,11 @@ fn full_lifecycle_crime_pool_buy() {
     let keyed = KeyedAccount {
         key: CRIME_SOL_POOL,
         account: Account {
-            lamports: 1_000_000, data: pool_data.clone(), owner: AMM_PROGRAM_ID,
-            executable: false, rent_epoch: 0,
+            lamports: 1_000_000,
+            data: pool_data.clone(),
+            owner: AMM_PROGRAM_ID,
+            executable: false,
+            rent_epoch: 0,
         },
         params: None,
     };
@@ -143,14 +171,20 @@ fn full_lifecycle_crime_pool_buy() {
     amm.update(&account_map).unwrap();
 
     // 3. Quote
-    let q = amm.quote(&QuoteParams {
-        amount: 1_000_000_000,
-        input_mint: NATIVE_MINT, output_mint: CRIME_MINT,
-        swap_mode: SwapMode::ExactIn,
-        fee_mode: jupiter_amm_interface::FeeMode::Normal,
-    }).unwrap();
+    let q = amm
+        .quote(&QuoteParams {
+            amount: 1_000_000_000,
+            input_mint: NATIVE_MINT,
+            output_mint: CRIME_MINT,
+            swap_mode: SwapMode::ExactIn,
+            fee_mode: jupiter_amm_interface::FeeMode::Normal,
+        })
+        .unwrap();
 
-    assert!(q.out_amount > 0, "Should produce output after full lifecycle");
+    assert!(
+        q.out_amount > 0,
+        "Should produce output after full lifecycle"
+    );
     assert!(q.fee_amount > 0, "Should have fees");
 }
 
@@ -160,8 +194,11 @@ fn full_lifecycle_fraud_pool_sell() {
     let keyed = KeyedAccount {
         key: FRAUD_SOL_POOL,
         account: Account {
-            lamports: 1_000_000, data: pool_data.clone(), owner: AMM_PROGRAM_ID,
-            executable: false, rent_epoch: 0,
+            lamports: 1_000_000,
+            data: pool_data.clone(),
+            owner: AMM_PROGRAM_ID,
+            executable: false,
+            rent_epoch: 0,
         },
         params: None,
     };
@@ -174,12 +211,15 @@ fn full_lifecycle_fraud_pool_sell() {
     ]);
     amm.update(&account_map).unwrap();
 
-    let q = amm.quote(&QuoteParams {
-        amount: 10_000_000_000, // 10K tokens
-        input_mint: FRAUD_MINT, output_mint: NATIVE_MINT,
-        swap_mode: SwapMode::ExactIn,
-        fee_mode: jupiter_amm_interface::FeeMode::Normal,
-    }).unwrap();
+    let q = amm
+        .quote(&QuoteParams {
+            amount: 10_000_000_000, // 10K tokens
+            input_mint: FRAUD_MINT,
+            output_mint: NATIVE_MINT,
+            swap_mode: SwapMode::ExactIn,
+            fee_mode: jupiter_amm_interface::FeeMode::Normal,
+        })
+        .unwrap();
 
     assert!(q.out_amount > 0);
 }
@@ -194,8 +234,11 @@ fn update_missing_pool_errors() {
     let keyed = KeyedAccount {
         key: CRIME_SOL_POOL,
         account: Account {
-            lamports: 1_000_000, data: pool_data, owner: AMM_PROGRAM_ID,
-            executable: false, rent_epoch: 0,
+            lamports: 1_000_000,
+            data: pool_data,
+            owner: AMM_PROGRAM_ID,
+            executable: false,
+            rent_epoch: 0,
         },
         params: None,
     };
@@ -212,17 +255,18 @@ fn update_missing_epoch_errors() {
     let keyed = KeyedAccount {
         key: CRIME_SOL_POOL,
         account: Account {
-            lamports: 1_000_000, data: pool_data.clone(), owner: AMM_PROGRAM_ID,
-            executable: false, rent_epoch: 0,
+            lamports: 1_000_000,
+            data: pool_data.clone(),
+            owner: AMM_PROGRAM_ID,
+            executable: false,
+            rent_epoch: 0,
         },
         params: None,
     };
     let mut amm = SolPoolAmm::from_keyed_account(&keyed, &amm_context()).unwrap();
 
     // Only pool, no epoch state
-    let account_map = build_account_map(vec![
-        (CRIME_SOL_POOL, pool_data, AMM_PROGRAM_ID),
-    ]);
+    let account_map = build_account_map(vec![(CRIME_SOL_POOL, pool_data, AMM_PROGRAM_ID)]);
     assert!(amm.update(&account_map).is_err());
 }
 
@@ -308,19 +352,30 @@ fn clone_amm_preserves_state() {
     let amm = SolPoolAmm::new_for_testing(true, 100_000_000_000, 500_000_000_000, 400, 1400);
     let cloned = amm.clone_amm();
 
-    let q_original = amm.quote(&QuoteParams {
-        amount: 1_000_000_000, input_mint: NATIVE_MINT, output_mint: CRIME_MINT,
-        swap_mode: SwapMode::ExactIn,
-        fee_mode: jupiter_amm_interface::FeeMode::Normal,
-    }).unwrap();
+    let q_original = amm
+        .quote(&QuoteParams {
+            amount: 1_000_000_000,
+            input_mint: NATIVE_MINT,
+            output_mint: CRIME_MINT,
+            swap_mode: SwapMode::ExactIn,
+            fee_mode: jupiter_amm_interface::FeeMode::Normal,
+        })
+        .unwrap();
 
-    let q_cloned = cloned.quote(&QuoteParams {
-        amount: 1_000_000_000, input_mint: NATIVE_MINT, output_mint: CRIME_MINT,
-        swap_mode: SwapMode::ExactIn,
-        fee_mode: jupiter_amm_interface::FeeMode::Normal,
-    }).unwrap();
+    let q_cloned = cloned
+        .quote(&QuoteParams {
+            amount: 1_000_000_000,
+            input_mint: NATIVE_MINT,
+            output_mint: CRIME_MINT,
+            swap_mode: SwapMode::ExactIn,
+            fee_mode: jupiter_amm_interface::FeeMode::Normal,
+        })
+        .unwrap();
 
-    assert_eq!(q_original.out_amount, q_cloned.out_amount, "Clone should produce same output");
+    assert_eq!(
+        q_original.out_amount, q_cloned.out_amount,
+        "Clone should produce same output"
+    );
 }
 
 // =============================================================================
@@ -333,7 +388,9 @@ fn quote_many_inputs_no_accumulation() {
 
     for amount in [1u64, 100, 1_000, 1_000_000, 1_000_000_000, 100_000_000_000] {
         let _ = amm.quote(&QuoteParams {
-            amount, input_mint: NATIVE_MINT, output_mint: CRIME_MINT,
+            amount,
+            input_mint: NATIVE_MINT,
+            output_mint: CRIME_MINT,
             swap_mode: SwapMode::ExactIn,
             fee_mode: jupiter_amm_interface::FeeMode::Normal,
         });
@@ -342,7 +399,9 @@ fn quote_many_inputs_no_accumulation() {
     let vault = VaultAmm::new_for_testing(CRIME_MINT, PROFIT_MINT);
     for amount in [100u64, 1_000, 10_000, 1_000_000, 1_000_000_000] {
         let _ = vault.quote(&QuoteParams {
-            amount, input_mint: CRIME_MINT, output_mint: PROFIT_MINT,
+            amount,
+            input_mint: CRIME_MINT,
+            output_mint: PROFIT_MINT,
             swap_mode: SwapMode::ExactIn,
             fee_mode: jupiter_amm_interface::FeeMode::Normal,
         });
@@ -357,14 +416,21 @@ fn quote_many_inputs_no_accumulation() {
 fn max_tax_50pct_still_produces_output() {
     let amm = SolPoolAmm::new_for_testing(true, 100_000_000_000, 100_000_000_000, 5000, 5000);
 
-    let q = amm.quote(&QuoteParams {
-        amount: 1_000_000_000, input_mint: NATIVE_MINT, output_mint: CRIME_MINT,
-        swap_mode: SwapMode::ExactIn,
-        fee_mode: jupiter_amm_interface::FeeMode::Normal,
-    }).unwrap();
+    let q = amm
+        .quote(&QuoteParams {
+            amount: 1_000_000_000,
+            input_mint: NATIVE_MINT,
+            output_mint: CRIME_MINT,
+            swap_mode: SwapMode::ExactIn,
+            fee_mode: jupiter_amm_interface::FeeMode::Normal,
+        })
+        .unwrap();
 
     assert!(q.out_amount > 0);
-    assert!(q.fee_amount >= 500_000_000, "50% tax should take at least 500M lamports");
+    assert!(
+        q.fee_amount >= 500_000_000,
+        "50% tax should take at least 500M lamports"
+    );
 }
 
 #[test]
@@ -372,17 +438,28 @@ fn zero_tax_higher_output() {
     let amm_taxed = SolPoolAmm::new_for_testing(true, 100_000_000_000, 100_000_000_000, 400, 1400);
     let amm_no_tax = SolPoolAmm::new_for_testing(true, 100_000_000_000, 100_000_000_000, 0, 0);
 
-    let q_taxed = amm_taxed.quote(&QuoteParams {
-        amount: 1_000_000_000, input_mint: NATIVE_MINT, output_mint: CRIME_MINT,
-        swap_mode: SwapMode::ExactIn,
-        fee_mode: jupiter_amm_interface::FeeMode::Normal,
-    }).unwrap();
+    let q_taxed = amm_taxed
+        .quote(&QuoteParams {
+            amount: 1_000_000_000,
+            input_mint: NATIVE_MINT,
+            output_mint: CRIME_MINT,
+            swap_mode: SwapMode::ExactIn,
+            fee_mode: jupiter_amm_interface::FeeMode::Normal,
+        })
+        .unwrap();
 
-    let q_free = amm_no_tax.quote(&QuoteParams {
-        amount: 1_000_000_000, input_mint: NATIVE_MINT, output_mint: CRIME_MINT,
-        swap_mode: SwapMode::ExactIn,
-        fee_mode: jupiter_amm_interface::FeeMode::Normal,
-    }).unwrap();
+    let q_free = amm_no_tax
+        .quote(&QuoteParams {
+            amount: 1_000_000_000,
+            input_mint: NATIVE_MINT,
+            output_mint: CRIME_MINT,
+            swap_mode: SwapMode::ExactIn,
+            fee_mode: jupiter_amm_interface::FeeMode::Normal,
+        })
+        .unwrap();
 
-    assert!(q_free.out_amount > q_taxed.out_amount, "Zero-tax should produce more output");
+    assert!(
+        q_free.out_amount > q_taxed.out_amount,
+        "Zero-tax should produce more output"
+    );
 }

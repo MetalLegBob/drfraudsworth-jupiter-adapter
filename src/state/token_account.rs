@@ -35,11 +35,9 @@ pub fn parse_token_account_amount(data: &[u8], expected_mint: &Pubkey) -> Result
         ));
     }
 
-    Ok(u64::from_le_bytes(
-        data[64..72]
-            .try_into()
-            .map_err(|_| anyhow!("failed to parse token account amount from bytes [64..72]"))?,
-    ))
+    Ok(u64::from_le_bytes(data[64..72].try_into().map_err(
+        |_| anyhow!("failed to parse token account amount from bytes [64..72]"),
+    )?))
 }
 
 // =============================================================================

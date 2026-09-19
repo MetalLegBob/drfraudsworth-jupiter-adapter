@@ -36,21 +36,23 @@ fn buy_crime_has_24_accounts() {
     let amm = crime_amm();
     let (user, wsol_ata, token_ata, jup_id) = make_swap_params();
 
-    let result = amm.get_swap_and_account_metas(&SwapParams {
-        swap_mode: SwapMode::ExactIn,
-        in_amount: 1_000_000_000,
-        out_amount: 0,
-        source_mint: NATIVE_MINT,
-        destination_mint: CRIME_MINT,
-        source_token_account: wsol_ata,
-        destination_token_account: token_ata,
-        token_transfer_authority: user,
-        user: solana_sdk::pubkey::Pubkey::default(),
-        payer: solana_sdk::pubkey::Pubkey::default(),
-        quote_mint_to_referrer: None,
-        jupiter_program_id: &jup_id,
-        missing_dynamic_accounts_as_default: false,
-    }).unwrap();
+    let result = amm
+        .get_swap_and_account_metas(&SwapParams {
+            swap_mode: SwapMode::ExactIn,
+            in_amount: 1_000_000_000,
+            out_amount: 0,
+            source_mint: NATIVE_MINT,
+            destination_mint: CRIME_MINT,
+            source_token_account: wsol_ata,
+            destination_token_account: token_ata,
+            token_transfer_authority: user,
+            quote_mint_to_referrer: None,
+            jupiter_program_id: &jup_id,
+            missing_dynamic_accounts_as_default: false,
+            user: solana_sdk::pubkey::Pubkey::default(),
+            payer: solana_sdk::pubkey::Pubkey::default(),
+        })
+        .unwrap();
 
     assert_eq!(result.account_metas.len(), 24, "Buy: 20 named + 4 hook");
 }
@@ -60,21 +62,23 @@ fn buy_fraud_has_24_accounts() {
     let amm = fraud_amm();
     let (user, wsol_ata, token_ata, jup_id) = make_swap_params();
 
-    let result = amm.get_swap_and_account_metas(&SwapParams {
-        swap_mode: SwapMode::ExactIn,
-        in_amount: 1_000_000_000,
-        out_amount: 0,
-        source_mint: NATIVE_MINT,
-        destination_mint: FRAUD_MINT,
-        source_token_account: wsol_ata,
-        destination_token_account: token_ata,
-        token_transfer_authority: user,
-        user: solana_sdk::pubkey::Pubkey::default(),
-        payer: solana_sdk::pubkey::Pubkey::default(),
-        quote_mint_to_referrer: None,
-        jupiter_program_id: &jup_id,
-        missing_dynamic_accounts_as_default: false,
-    }).unwrap();
+    let result = amm
+        .get_swap_and_account_metas(&SwapParams {
+            swap_mode: SwapMode::ExactIn,
+            in_amount: 1_000_000_000,
+            out_amount: 0,
+            source_mint: NATIVE_MINT,
+            destination_mint: FRAUD_MINT,
+            source_token_account: wsol_ata,
+            destination_token_account: token_ata,
+            token_transfer_authority: user,
+            quote_mint_to_referrer: None,
+            jupiter_program_id: &jup_id,
+            missing_dynamic_accounts_as_default: false,
+            user: solana_sdk::pubkey::Pubkey::default(),
+            payer: solana_sdk::pubkey::Pubkey::default(),
+        })
+        .unwrap();
 
     assert_eq!(result.account_metas.len(), 24);
 }
@@ -88,21 +92,23 @@ fn sell_crime_has_25_accounts() {
     let amm = crime_amm();
     let (user, token_ata, wsol_ata, jup_id) = make_swap_params();
 
-    let result = amm.get_swap_and_account_metas(&SwapParams {
-        swap_mode: SwapMode::ExactIn,
-        in_amount: 1_000_000_000,
-        out_amount: 0,
-        source_mint: CRIME_MINT,
-        destination_mint: NATIVE_MINT,
-        source_token_account: token_ata,
-        destination_token_account: wsol_ata,
-        token_transfer_authority: user,
-        user: solana_sdk::pubkey::Pubkey::default(),
-        payer: solana_sdk::pubkey::Pubkey::default(),
-        quote_mint_to_referrer: None,
-        jupiter_program_id: &jup_id,
-        missing_dynamic_accounts_as_default: false,
-    }).unwrap();
+    let result = amm
+        .get_swap_and_account_metas(&SwapParams {
+            swap_mode: SwapMode::ExactIn,
+            in_amount: 1_000_000_000,
+            out_amount: 0,
+            source_mint: CRIME_MINT,
+            destination_mint: NATIVE_MINT,
+            source_token_account: token_ata,
+            destination_token_account: wsol_ata,
+            token_transfer_authority: user,
+            quote_mint_to_referrer: None,
+            jupiter_program_id: &jup_id,
+            missing_dynamic_accounts_as_default: false,
+            user: solana_sdk::pubkey::Pubkey::default(),
+            payer: solana_sdk::pubkey::Pubkey::default(),
+        })
+        .unwrap();
 
     assert_eq!(result.account_metas.len(), 25, "Sell: 21 named + 4 hook");
 }
@@ -112,21 +118,23 @@ fn sell_fraud_has_25_accounts() {
     let amm = fraud_amm();
     let (user, token_ata, wsol_ata, jup_id) = make_swap_params();
 
-    let result = amm.get_swap_and_account_metas(&SwapParams {
-        swap_mode: SwapMode::ExactIn,
-        in_amount: 1_000_000_000,
-        out_amount: 0,
-        source_mint: FRAUD_MINT,
-        destination_mint: NATIVE_MINT,
-        source_token_account: token_ata,
-        destination_token_account: wsol_ata,
-        token_transfer_authority: user,
-        user: solana_sdk::pubkey::Pubkey::default(),
-        payer: solana_sdk::pubkey::Pubkey::default(),
-        quote_mint_to_referrer: None,
-        jupiter_program_id: &jup_id,
-        missing_dynamic_accounts_as_default: false,
-    }).unwrap();
+    let result = amm
+        .get_swap_and_account_metas(&SwapParams {
+            swap_mode: SwapMode::ExactIn,
+            in_amount: 1_000_000_000,
+            out_amount: 0,
+            source_mint: FRAUD_MINT,
+            destination_mint: NATIVE_MINT,
+            source_token_account: token_ata,
+            destination_token_account: wsol_ata,
+            token_transfer_authority: user,
+            quote_mint_to_referrer: None,
+            jupiter_program_id: &jup_id,
+            missing_dynamic_accounts_as_default: false,
+            user: solana_sdk::pubkey::Pubkey::default(),
+            payer: solana_sdk::pubkey::Pubkey::default(),
+        })
+        .unwrap();
 
     assert_eq!(result.account_metas.len(), 25);
 }
@@ -140,21 +148,23 @@ fn vault_crime_to_profit_has_17_accounts() {
     let amm = VaultAmm::new_for_testing(CRIME_MINT, PROFIT_MINT);
     let (user, input_ata, output_ata, jup_id) = make_swap_params();
 
-    let result = amm.get_swap_and_account_metas(&SwapParams {
-        swap_mode: SwapMode::ExactIn,
-        in_amount: 10_000,
-        out_amount: 0,
-        source_mint: CRIME_MINT,
-        destination_mint: PROFIT_MINT,
-        source_token_account: input_ata,
-        destination_token_account: output_ata,
-        token_transfer_authority: user,
-        user: solana_sdk::pubkey::Pubkey::default(),
-        payer: solana_sdk::pubkey::Pubkey::default(),
-        quote_mint_to_referrer: None,
-        jupiter_program_id: &jup_id,
-        missing_dynamic_accounts_as_default: false,
-    }).unwrap();
+    let result = amm
+        .get_swap_and_account_metas(&SwapParams {
+            swap_mode: SwapMode::ExactIn,
+            in_amount: 10_000,
+            out_amount: 0,
+            source_mint: CRIME_MINT,
+            destination_mint: PROFIT_MINT,
+            source_token_account: input_ata,
+            destination_token_account: output_ata,
+            token_transfer_authority: user,
+            quote_mint_to_referrer: None,
+            jupiter_program_id: &jup_id,
+            missing_dynamic_accounts_as_default: false,
+            user: solana_sdk::pubkey::Pubkey::default(),
+            payer: solana_sdk::pubkey::Pubkey::default(),
+        })
+        .unwrap();
 
     assert_eq!(result.account_metas.len(), 17, "Vault: 9 named + 8 hook");
 }
@@ -164,21 +174,23 @@ fn vault_profit_to_fraud_has_17_accounts() {
     let amm = VaultAmm::new_for_testing(PROFIT_MINT, FRAUD_MINT);
     let (user, input_ata, output_ata, jup_id) = make_swap_params();
 
-    let result = amm.get_swap_and_account_metas(&SwapParams {
-        swap_mode: SwapMode::ExactIn,
-        in_amount: 100,
-        out_amount: 0,
-        source_mint: PROFIT_MINT,
-        destination_mint: FRAUD_MINT,
-        source_token_account: input_ata,
-        destination_token_account: output_ata,
-        token_transfer_authority: user,
-        user: solana_sdk::pubkey::Pubkey::default(),
-        payer: solana_sdk::pubkey::Pubkey::default(),
-        quote_mint_to_referrer: None,
-        jupiter_program_id: &jup_id,
-        missing_dynamic_accounts_as_default: false,
-    }).unwrap();
+    let result = amm
+        .get_swap_and_account_metas(&SwapParams {
+            swap_mode: SwapMode::ExactIn,
+            in_amount: 100,
+            out_amount: 0,
+            source_mint: PROFIT_MINT,
+            destination_mint: FRAUD_MINT,
+            source_token_account: input_ata,
+            destination_token_account: output_ata,
+            token_transfer_authority: user,
+            quote_mint_to_referrer: None,
+            jupiter_program_id: &jup_id,
+            missing_dynamic_accounts_as_default: false,
+            user: solana_sdk::pubkey::Pubkey::default(),
+            payer: solana_sdk::pubkey::Pubkey::default(),
+        })
+        .unwrap();
 
     assert_eq!(result.account_metas.len(), 17);
 }
@@ -193,21 +205,23 @@ fn buy_user_is_signer_and_writable() {
     let user = Pubkey::new_unique();
     let jup_id = Pubkey::new_unique();
 
-    let result = amm.get_swap_and_account_metas(&SwapParams {
-        swap_mode: SwapMode::ExactIn,
-        in_amount: 1_000_000_000,
-        out_amount: 0,
-        source_mint: NATIVE_MINT,
-        destination_mint: CRIME_MINT,
-        source_token_account: Pubkey::new_unique(),
-        destination_token_account: Pubkey::new_unique(),
-        token_transfer_authority: user,
-        user: solana_sdk::pubkey::Pubkey::default(),
-        payer: solana_sdk::pubkey::Pubkey::default(),
-        quote_mint_to_referrer: None,
-        jupiter_program_id: &jup_id,
-        missing_dynamic_accounts_as_default: false,
-    }).unwrap();
+    let result = amm
+        .get_swap_and_account_metas(&SwapParams {
+            swap_mode: SwapMode::ExactIn,
+            in_amount: 1_000_000_000,
+            out_amount: 0,
+            source_mint: NATIVE_MINT,
+            destination_mint: CRIME_MINT,
+            source_token_account: Pubkey::new_unique(),
+            destination_token_account: Pubkey::new_unique(),
+            token_transfer_authority: user,
+            quote_mint_to_referrer: None,
+            jupiter_program_id: &jup_id,
+            missing_dynamic_accounts_as_default: false,
+            user: solana_sdk::pubkey::Pubkey::default(),
+            payer: solana_sdk::pubkey::Pubkey::default(),
+        })
+        .unwrap();
 
     assert_eq!(result.account_metas[0].pubkey, user);
     assert!(result.account_metas[0].is_signer);
@@ -219,21 +233,23 @@ fn buy_epoch_state_is_readonly() {
     let amm = crime_amm();
     let jup_id = Pubkey::new_unique();
 
-    let result = amm.get_swap_and_account_metas(&SwapParams {
-        swap_mode: SwapMode::ExactIn,
-        in_amount: 1_000_000_000,
-        out_amount: 0,
-        source_mint: NATIVE_MINT,
-        destination_mint: CRIME_MINT,
-        source_token_account: Pubkey::new_unique(),
-        destination_token_account: Pubkey::new_unique(),
-        token_transfer_authority: Pubkey::new_unique(),
-        user: solana_sdk::pubkey::Pubkey::default(),
-        payer: solana_sdk::pubkey::Pubkey::default(),
-        quote_mint_to_referrer: None,
-        jupiter_program_id: &jup_id,
-        missing_dynamic_accounts_as_default: false,
-    }).unwrap();
+    let result = amm
+        .get_swap_and_account_metas(&SwapParams {
+            swap_mode: SwapMode::ExactIn,
+            in_amount: 1_000_000_000,
+            out_amount: 0,
+            source_mint: NATIVE_MINT,
+            destination_mint: CRIME_MINT,
+            source_token_account: Pubkey::new_unique(),
+            destination_token_account: Pubkey::new_unique(),
+            token_transfer_authority: Pubkey::new_unique(),
+            quote_mint_to_referrer: None,
+            jupiter_program_id: &jup_id,
+            missing_dynamic_accounts_as_default: false,
+            user: solana_sdk::pubkey::Pubkey::default(),
+            payer: solana_sdk::pubkey::Pubkey::default(),
+        })
+        .unwrap();
 
     assert_eq!(result.account_metas[1].pubkey, EPOCH_STATE_PDA);
     assert!(!result.account_metas[1].is_writable);
@@ -245,24 +261,29 @@ fn buy_swap_authority_is_readonly() {
     let amm = crime_amm();
     let jup_id = Pubkey::new_unique();
 
-    let result = amm.get_swap_and_account_metas(&SwapParams {
-        swap_mode: SwapMode::ExactIn,
-        in_amount: 1_000_000_000,
-        out_amount: 0,
-        source_mint: NATIVE_MINT,
-        destination_mint: CRIME_MINT,
-        source_token_account: Pubkey::new_unique(),
-        destination_token_account: Pubkey::new_unique(),
-        token_transfer_authority: Pubkey::new_unique(),
-        user: solana_sdk::pubkey::Pubkey::default(),
-        payer: solana_sdk::pubkey::Pubkey::default(),
-        quote_mint_to_referrer: None,
-        jupiter_program_id: &jup_id,
-        missing_dynamic_accounts_as_default: false,
-    }).unwrap();
+    let result = amm
+        .get_swap_and_account_metas(&SwapParams {
+            swap_mode: SwapMode::ExactIn,
+            in_amount: 1_000_000_000,
+            out_amount: 0,
+            source_mint: NATIVE_MINT,
+            destination_mint: CRIME_MINT,
+            source_token_account: Pubkey::new_unique(),
+            destination_token_account: Pubkey::new_unique(),
+            token_transfer_authority: Pubkey::new_unique(),
+            quote_mint_to_referrer: None,
+            jupiter_program_id: &jup_id,
+            missing_dynamic_accounts_as_default: false,
+            user: solana_sdk::pubkey::Pubkey::default(),
+            payer: solana_sdk::pubkey::Pubkey::default(),
+        })
+        .unwrap();
 
     assert_eq!(result.account_metas[2].pubkey, SWAP_AUTHORITY_PDA);
-    assert!(!result.account_metas[2].is_writable, "Buy: swap_authority should be readonly");
+    assert!(
+        !result.account_metas[2].is_writable,
+        "Buy: swap_authority should be readonly"
+    );
 }
 
 #[test]
@@ -270,24 +291,29 @@ fn sell_swap_authority_is_writable() {
     let amm = crime_amm();
     let jup_id = Pubkey::new_unique();
 
-    let result = amm.get_swap_and_account_metas(&SwapParams {
-        swap_mode: SwapMode::ExactIn,
-        in_amount: 1_000_000_000,
-        out_amount: 0,
-        source_mint: CRIME_MINT,
-        destination_mint: NATIVE_MINT,
-        source_token_account: Pubkey::new_unique(),
-        destination_token_account: Pubkey::new_unique(),
-        token_transfer_authority: Pubkey::new_unique(),
-        user: solana_sdk::pubkey::Pubkey::default(),
-        payer: solana_sdk::pubkey::Pubkey::default(),
-        quote_mint_to_referrer: None,
-        jupiter_program_id: &jup_id,
-        missing_dynamic_accounts_as_default: false,
-    }).unwrap();
+    let result = amm
+        .get_swap_and_account_metas(&SwapParams {
+            swap_mode: SwapMode::ExactIn,
+            in_amount: 1_000_000_000,
+            out_amount: 0,
+            source_mint: CRIME_MINT,
+            destination_mint: NATIVE_MINT,
+            source_token_account: Pubkey::new_unique(),
+            destination_token_account: Pubkey::new_unique(),
+            token_transfer_authority: Pubkey::new_unique(),
+            quote_mint_to_referrer: None,
+            jupiter_program_id: &jup_id,
+            missing_dynamic_accounts_as_default: false,
+            user: solana_sdk::pubkey::Pubkey::default(),
+            payer: solana_sdk::pubkey::Pubkey::default(),
+        })
+        .unwrap();
 
     assert_eq!(result.account_metas[2].pubkey, SWAP_AUTHORITY_PDA);
-    assert!(result.account_metas[2].is_writable, "Sell: swap_authority should be writable");
+    assert!(
+        result.account_metas[2].is_writable,
+        "Sell: swap_authority should be writable"
+    );
 }
 
 #[test]
@@ -295,21 +321,23 @@ fn sell_has_wsol_intermediary_at_index_15() {
     let amm = crime_amm();
     let jup_id = Pubkey::new_unique();
 
-    let result = amm.get_swap_and_account_metas(&SwapParams {
-        swap_mode: SwapMode::ExactIn,
-        in_amount: 1_000_000_000,
-        out_amount: 0,
-        source_mint: CRIME_MINT,
-        destination_mint: NATIVE_MINT,
-        source_token_account: Pubkey::new_unique(),
-        destination_token_account: Pubkey::new_unique(),
-        token_transfer_authority: Pubkey::new_unique(),
-        user: solana_sdk::pubkey::Pubkey::default(),
-        payer: solana_sdk::pubkey::Pubkey::default(),
-        quote_mint_to_referrer: None,
-        jupiter_program_id: &jup_id,
-        missing_dynamic_accounts_as_default: false,
-    }).unwrap();
+    let result = amm
+        .get_swap_and_account_metas(&SwapParams {
+            swap_mode: SwapMode::ExactIn,
+            in_amount: 1_000_000_000,
+            out_amount: 0,
+            source_mint: CRIME_MINT,
+            destination_mint: NATIVE_MINT,
+            source_token_account: Pubkey::new_unique(),
+            destination_token_account: Pubkey::new_unique(),
+            token_transfer_authority: Pubkey::new_unique(),
+            quote_mint_to_referrer: None,
+            jupiter_program_id: &jup_id,
+            missing_dynamic_accounts_as_default: false,
+            user: solana_sdk::pubkey::Pubkey::default(),
+            payer: solana_sdk::pubkey::Pubkey::default(),
+        })
+        .unwrap();
 
     // Sell has WSOL intermediary at index 15 (extra account vs buy)
     assert_eq!(result.account_metas[15].pubkey, WSOL_INTERMEDIARY_PDA);
@@ -321,21 +349,23 @@ fn buy_pool_address_matches_crime() {
     let amm = crime_amm();
     let jup_id = Pubkey::new_unique();
 
-    let result = amm.get_swap_and_account_metas(&SwapParams {
-        swap_mode: SwapMode::ExactIn,
-        in_amount: 1_000_000_000,
-        out_amount: 0,
-        source_mint: NATIVE_MINT,
-        destination_mint: CRIME_MINT,
-        source_token_account: Pubkey::new_unique(),
-        destination_token_account: Pubkey::new_unique(),
-        token_transfer_authority: Pubkey::new_unique(),
-        user: solana_sdk::pubkey::Pubkey::default(),
-        payer: solana_sdk::pubkey::Pubkey::default(),
-        quote_mint_to_referrer: None,
-        jupiter_program_id: &jup_id,
-        missing_dynamic_accounts_as_default: false,
-    }).unwrap();
+    let result = amm
+        .get_swap_and_account_metas(&SwapParams {
+            swap_mode: SwapMode::ExactIn,
+            in_amount: 1_000_000_000,
+            out_amount: 0,
+            source_mint: NATIVE_MINT,
+            destination_mint: CRIME_MINT,
+            source_token_account: Pubkey::new_unique(),
+            destination_token_account: Pubkey::new_unique(),
+            token_transfer_authority: Pubkey::new_unique(),
+            quote_mint_to_referrer: None,
+            jupiter_program_id: &jup_id,
+            missing_dynamic_accounts_as_default: false,
+            user: solana_sdk::pubkey::Pubkey::default(),
+            payer: solana_sdk::pubkey::Pubkey::default(),
+        })
+        .unwrap();
 
     assert_eq!(result.account_metas[4].pubkey, CRIME_SOL_POOL);
     assert_eq!(result.account_metas[8].pubkey, CRIME_MINT);
@@ -346,21 +376,23 @@ fn buy_pool_address_matches_fraud() {
     let amm = fraud_amm();
     let jup_id = Pubkey::new_unique();
 
-    let result = amm.get_swap_and_account_metas(&SwapParams {
-        swap_mode: SwapMode::ExactIn,
-        in_amount: 1_000_000_000,
-        out_amount: 0,
-        source_mint: NATIVE_MINT,
-        destination_mint: FRAUD_MINT,
-        source_token_account: Pubkey::new_unique(),
-        destination_token_account: Pubkey::new_unique(),
-        token_transfer_authority: Pubkey::new_unique(),
-        user: solana_sdk::pubkey::Pubkey::default(),
-        payer: solana_sdk::pubkey::Pubkey::default(),
-        quote_mint_to_referrer: None,
-        jupiter_program_id: &jup_id,
-        missing_dynamic_accounts_as_default: false,
-    }).unwrap();
+    let result = amm
+        .get_swap_and_account_metas(&SwapParams {
+            swap_mode: SwapMode::ExactIn,
+            in_amount: 1_000_000_000,
+            out_amount: 0,
+            source_mint: NATIVE_MINT,
+            destination_mint: FRAUD_MINT,
+            source_token_account: Pubkey::new_unique(),
+            destination_token_account: Pubkey::new_unique(),
+            token_transfer_authority: Pubkey::new_unique(),
+            quote_mint_to_referrer: None,
+            jupiter_program_id: &jup_id,
+            missing_dynamic_accounts_as_default: false,
+            user: solana_sdk::pubkey::Pubkey::default(),
+            payer: solana_sdk::pubkey::Pubkey::default(),
+        })
+        .unwrap();
 
     assert_eq!(result.account_metas[4].pubkey, FRAUD_SOL_POOL);
     assert_eq!(result.account_metas[8].pubkey, FRAUD_MINT);
@@ -375,21 +407,23 @@ fn buy_hook_accounts_are_last_4() {
     let amm = crime_amm();
     let jup_id = Pubkey::new_unique();
 
-    let result = amm.get_swap_and_account_metas(&SwapParams {
-        swap_mode: SwapMode::ExactIn,
-        in_amount: 1_000_000_000,
-        out_amount: 0,
-        source_mint: NATIVE_MINT,
-        destination_mint: CRIME_MINT,
-        source_token_account: Pubkey::new_unique(),
-        destination_token_account: Pubkey::new_unique(),
-        token_transfer_authority: Pubkey::new_unique(),
-        user: solana_sdk::pubkey::Pubkey::default(),
-        payer: solana_sdk::pubkey::Pubkey::default(),
-        quote_mint_to_referrer: None,
-        jupiter_program_id: &jup_id,
-        missing_dynamic_accounts_as_default: false,
-    }).unwrap();
+    let result = amm
+        .get_swap_and_account_metas(&SwapParams {
+            swap_mode: SwapMode::ExactIn,
+            in_amount: 1_000_000_000,
+            out_amount: 0,
+            source_mint: NATIVE_MINT,
+            destination_mint: CRIME_MINT,
+            source_token_account: Pubkey::new_unique(),
+            destination_token_account: Pubkey::new_unique(),
+            token_transfer_authority: Pubkey::new_unique(),
+            quote_mint_to_referrer: None,
+            jupiter_program_id: &jup_id,
+            missing_dynamic_accounts_as_default: false,
+            user: solana_sdk::pubkey::Pubkey::default(),
+            payer: solana_sdk::pubkey::Pubkey::default(),
+        })
+        .unwrap();
 
     // Last 4 accounts are hook accounts
     // [20] = CRIME_HOOK_META
@@ -409,21 +443,23 @@ fn vault_has_8_hook_accounts_at_end() {
     let amm = VaultAmm::new_for_testing(CRIME_MINT, PROFIT_MINT);
     let jup_id = Pubkey::new_unique();
 
-    let result = amm.get_swap_and_account_metas(&SwapParams {
-        swap_mode: SwapMode::ExactIn,
-        in_amount: 10_000,
-        out_amount: 0,
-        source_mint: CRIME_MINT,
-        destination_mint: PROFIT_MINT,
-        source_token_account: Pubkey::new_unique(),
-        destination_token_account: Pubkey::new_unique(),
-        token_transfer_authority: Pubkey::new_unique(),
-        user: solana_sdk::pubkey::Pubkey::default(),
-        payer: solana_sdk::pubkey::Pubkey::default(),
-        quote_mint_to_referrer: None,
-        jupiter_program_id: &jup_id,
-        missing_dynamic_accounts_as_default: false,
-    }).unwrap();
+    let result = amm
+        .get_swap_and_account_metas(&SwapParams {
+            swap_mode: SwapMode::ExactIn,
+            in_amount: 10_000,
+            out_amount: 0,
+            source_mint: CRIME_MINT,
+            destination_mint: PROFIT_MINT,
+            source_token_account: Pubkey::new_unique(),
+            destination_token_account: Pubkey::new_unique(),
+            token_transfer_authority: Pubkey::new_unique(),
+            quote_mint_to_referrer: None,
+            jupiter_program_id: &jup_id,
+            missing_dynamic_accounts_as_default: false,
+            user: solana_sdk::pubkey::Pubkey::default(),
+            payer: solana_sdk::pubkey::Pubkey::default(),
+        })
+        .unwrap();
 
     // 9 named + 4 input hooks + 4 output hooks = 17
     assert_eq!(result.account_metas.len(), 17);

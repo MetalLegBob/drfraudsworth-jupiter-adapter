@@ -22,9 +22,9 @@ use crate::state::pool_state::ParsedPoolState;
 use super::addresses::{
     AMM_PROGRAM_ID, CARNAGE_SOL_VAULT_PDA, CRIME_MINT, CRIME_SOL_POOL, CRIME_SOL_VAULT_A,
     CRIME_SOL_VAULT_B, EPOCH_STATE_PDA, ESCROW_VAULT_PDA, FRAUD_MINT, FRAUD_SOL_POOL,
-    FRAUD_SOL_VAULT_A, FRAUD_SOL_VAULT_B, NATIVE_MINT, SPL_TOKEN_PROGRAM_ID, STAKING_PROGRAM_ID,
-    STAKE_POOL_PDA, SWAP_AUTHORITY_PDA, SYSTEM_PROGRAM_ID, TAX_AUTHORITY_PDA, TOKEN_2022_PROGRAM_ID,
-    TREASURY, WSOL_INTERMEDIARY_PDA,
+    FRAUD_SOL_VAULT_A, FRAUD_SOL_VAULT_B, NATIVE_MINT, SPL_TOKEN_PROGRAM_ID, STAKE_POOL_PDA,
+    STAKING_PROGRAM_ID, SWAP_AUTHORITY_PDA, SYSTEM_PROGRAM_ID, TAX_AUTHORITY_PDA,
+    TOKEN_2022_PROGRAM_ID, TREASURY, WSOL_INTERMEDIARY_PDA,
 };
 use super::hook_accounts::hook_metas_for_mint;
 
@@ -75,11 +75,7 @@ pub fn build_buy_account_metas_generic(
     } else {
         (user_sol_ata, user_token_ata)
     };
-    let (token_program_a, token_program_b) = if sides.token_on_a {
-        (TOKEN_2022_PROGRAM_ID, SPL_TOKEN_PROGRAM_ID)
-    } else {
-        (SPL_TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID)
-    };
+    let (token_program_a, token_program_b) = (pool.token_program_a, pool.token_program_b);
 
     let mut metas = vec![
         // 1. user (signer, mut)
@@ -156,11 +152,7 @@ pub fn build_sell_account_metas_generic(
     } else {
         (user_sol_ata, user_token_ata)
     };
-    let (token_program_a, token_program_b) = if sides.token_on_a {
-        (TOKEN_2022_PROGRAM_ID, SPL_TOKEN_PROGRAM_ID)
-    } else {
-        (SPL_TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID)
-    };
+    let (token_program_a, token_program_b) = (pool.token_program_a, pool.token_program_b);
 
     let mut metas = vec![
         // 1. user (signer, mut)
@@ -231,6 +223,13 @@ pub(crate) fn known_pool_state(is_crime: bool) -> (Pubkey, ParsedPoolState) {
             reserve_a: 0,
             reserve_b: 0,
             lp_fee_bps: LP_FEE_BPS,
+            initialized: true,
+            locked: false,
+            bump: 0,
+            vault_a_bump: 0,
+            vault_b_bump: 0,
+            token_program_a: SPL_TOKEN_PROGRAM_ID,
+            token_program_b: TOKEN_2022_PROGRAM_ID,
         },
     )
 }
@@ -276,9 +275,19 @@ pub fn build_sell_account_metas(
 /// Returns (pool, vault_a, vault_b, token_mint).
 fn pool_addresses(is_crime: bool) -> (Pubkey, Pubkey, Pubkey, Pubkey) {
     if is_crime {
-        (CRIME_SOL_POOL, CRIME_SOL_VAULT_A, CRIME_SOL_VAULT_B, CRIME_MINT)
+        (
+            CRIME_SOL_POOL,
+            CRIME_SOL_VAULT_A,
+            CRIME_SOL_VAULT_B,
+            CRIME_MINT,
+        )
     } else {
-        (FRAUD_SOL_POOL, FRAUD_SOL_VAULT_A, FRAUD_SOL_VAULT_B, FRAUD_MINT)
+        (
+            FRAUD_SOL_POOL,
+            FRAUD_SOL_VAULT_A,
+            FRAUD_SOL_VAULT_B,
+            FRAUD_MINT,
+        )
     }
 }
 
@@ -299,7 +308,11 @@ mod tests {
         let metas = build_buy_account_metas(&user, &wsol, &token, true);
 
         // 20 named + 4 hook = 24 total
-        assert_eq!(metas.len(), 24, "buy should have 20 named + 4 hook accounts");
+        assert_eq!(
+            metas.len(),
+            24,
+            "buy should have 20 named + 4 hook accounts"
+        );
 
         // Verify first 20 are the named accounts (no hooks yet)
         // Account 1: user is signer + mutable
@@ -327,7 +340,11 @@ mod tests {
         let metas = build_sell_account_metas(&user, &token, &wsol, true);
 
         // 21 named + 4 hook = 25 total
-        assert_eq!(metas.len(), 25, "sell should have 21 named + 4 hook accounts");
+        assert_eq!(
+            metas.len(),
+            25,
+            "sell should have 21 named + 4 hook accounts"
+        );
 
         // Account 16: wsol_intermediary (sell-only)
         assert_eq!(metas[15].pubkey, WSOL_INTERMEDIARY_PDA);
@@ -380,7 +397,10 @@ mod tests {
         // [20] = CRIME_HOOK_META
         assert_eq!(metas[20].pubkey, super::super::addresses::CRIME_HOOK_META);
         // [23] = TRANSFER_HOOK_PROGRAM_ID
-        assert_eq!(metas[23].pubkey, super::super::addresses::TRANSFER_HOOK_PROGRAM_ID);
+        assert_eq!(
+            metas[23].pubkey,
+            super::super::addresses::TRANSFER_HOOK_PROGRAM_ID
+        );
     }
 
     #[test]
@@ -426,6 +446,13 @@ mod tests {
             reserve_a: 0,
             reserve_b: 0,
             lp_fee_bps: LP_FEE_BPS,
+            initialized: true,
+            locked: false,
+            bump: 0,
+            vault_a_bump: 0,
+            vault_b_bump: 0,
+            token_program_a: TOKEN_2022_PROGRAM_ID,
+            token_program_b: SPL_TOKEN_PROGRAM_ID,
         };
 
         let metas =
@@ -455,6 +482,13 @@ mod tests {
             reserve_a: 0,
             reserve_b: 0,
             lp_fee_bps: LP_FEE_BPS,
+            initialized: true,
+            locked: false,
+            bump: 0,
+            vault_a_bump: 0,
+            vault_b_bump: 0,
+            token_program_a: TOKEN_2022_PROGRAM_ID,
+            token_program_b: SPL_TOKEN_PROGRAM_ID,
         };
 
         let result = build_buy_account_metas_generic(
