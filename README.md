@@ -62,8 +62,8 @@ let all_keys: Vec<Pubkey> = all_pool_keys();
 1. Rejects accounts not owned by the AMM program
 2. Rejects data without the `PoolState` Anchor discriminator (`sha256("account:PoolState")[0..8]`)
 3. Requires the exact deployed 224-byte layout, canonical mint order, canonical
-   pool PDA, an initialized/unlocked lifecycle, supported token programs, and
-   exactly one CRIME/FRAUD side
+   pool PDA, initialized state, supported token programs, and exactly one
+   CRIME/FRAUD side; a locked pool stays discoverable but inactive
 4. Derives mints, vaults, reserves, token programs, and orientation entirely
    from the account bytes
 5. Selects the existing Tax SOL lane when the quote is WSOL, otherwise the Tax

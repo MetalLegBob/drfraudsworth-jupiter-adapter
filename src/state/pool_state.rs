@@ -62,7 +62,7 @@ impl ParsedPoolState {
     /// Parse PoolState from raw account data bytes.
     ///
     /// Validates:
-    /// - Minimum length (155 bytes)
+    /// - Exact deployed length (224 bytes)
     /// - Anchor discriminator (sha256("account:PoolState")[0..8])
     ///
     /// The discriminator check makes it safe to feed this parser arbitrary

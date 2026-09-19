@@ -498,21 +498,21 @@ impl SolPoolAmm {
         }
     }
 
-    /// Quote a buy (SOL -> token).
+    /// Quote a buy (quote -> faction).
     ///
-    /// Flow: tax deducted from SOL input, LP fee deducted, then constant-product swap.
+    /// Flow: tax deducted from quote input, LP fee deducted, then constant-product swap.
     fn quote_buy(&self, amount_in: u64) -> Result<Quote> {
         let (reserve_quote, reserve_faction) = self.reserves();
 
-        // 1. Tax deducted from SOL input
+        // 1. Tax deducted from quote input
         let tax = calculate_tax(amount_in, self.buy_tax_bps)
             .ok_or_else(|| anyhow!("Tax calculation overflow"))?;
 
-        let sol_to_swap = amount_in
+        let quote_to_swap = amount_in
             .checked_sub(tax)
             .ok_or_else(|| anyhow!("Tax exceeds input amount"))?;
 
-        if sol_to_swap == 0 {
+        if quote_to_swap == 0 {
             return Ok(Quote {
                 in_amount: amount_in,
                 out_amount: 0,
@@ -523,40 +523,39 @@ impl SolPoolAmm {
         }
 
         // 2. LP fee deducted from post-tax amount
-        let effective_input = calculate_effective_input(sol_to_swap, self.pool.lp_fee_bps)
+        let effective_input = calculate_effective_input(quote_to_swap, self.pool.lp_fee_bps)
             .ok_or_else(|| anyhow!("Effective input calculation overflow"))?;
 
         // 3. Constant-product swap
         let out_amount = calculate_swap_output(reserve_quote, reserve_faction, effective_input)
             .ok_or_else(|| anyhow!("Swap output calculation overflow or zero reserves"))?;
 
-        // LP fee in SOL terms
-        let lp_fee_sol = sol_to_swap.saturating_sub(effective_input as u64);
+        let lp_fee_quote = quote_to_swap.saturating_sub(effective_input as u64);
 
         Ok(Quote {
             in_amount: amount_in,
             out_amount,
-            fee_amount: tax.checked_add(lp_fee_sol).unwrap_or(tax),
+            fee_amount: tax.checked_add(lp_fee_quote).unwrap_or(tax),
             fee_mint: self.quote_mint,
             fee_pct: self.total_buy_fee_pct(),
         })
     }
 
-    /// Quote a sell (token -> SOL).
+    /// Quote a sell (faction -> quote).
     ///
-    /// Flow: LP fee deducted from token input, constant-product swap, then tax on SOL output.
+    /// Flow: LP fee deducted from faction input, constant-product swap, then tax on quote output.
     fn quote_sell(&self, amount_in: u64) -> Result<Quote> {
         let (reserve_quote, reserve_faction) = self.reserves();
 
-        // 1. LP fee deducted from token input
+        // 1. LP fee deducted from faction input
         let effective_input = calculate_effective_input(amount_in, self.pool.lp_fee_bps)
             .ok_or_else(|| anyhow!("Effective input calculation overflow"))?;
 
-        // 2. Constant-product swap (token -> SOL)
+        // 2. Constant-product swap (faction -> quote)
         let gross_quote = calculate_swap_output(reserve_faction, reserve_quote, effective_input)
             .ok_or_else(|| anyhow!("Swap output calculation overflow or zero reserves"))?;
 
-        // 3. Tax deducted from SOL output
+        // 3. Tax deducted from quote output
         let tax = calculate_tax(gross_quote, self.sell_tax_bps)
             .ok_or_else(|| anyhow!("Tax calculation overflow"))?;
 
