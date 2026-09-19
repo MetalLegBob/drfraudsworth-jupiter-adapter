@@ -93,6 +93,7 @@ fn speed_buy_crime_10k() {
             amount: 1_000_000 + i,
             input_mint: NATIVE_MINT, output_mint: CRIME_MINT,
             swap_mode: SwapMode::ExactIn,
+            fee_mode: jupiter_amm_interface::FeeMode::Normal,
         });
     }
 
@@ -111,6 +112,7 @@ fn speed_sell_crime_10k() {
             amount: 1_000_000 + i,
             input_mint: CRIME_MINT, output_mint: NATIVE_MINT,
             swap_mode: SwapMode::ExactIn,
+            fee_mode: jupiter_amm_interface::FeeMode::Normal,
         });
     }
 
@@ -129,6 +131,7 @@ fn speed_vault_convert_10k() {
             amount: 10_000 + i,
             input_mint: CRIME_MINT, output_mint: PROFIT_MINT,
             swap_mode: SwapMode::ExactIn,
+            fee_mode: jupiter_amm_interface::FeeMode::Normal,
         });
     }
 
@@ -154,6 +157,8 @@ fn speed_get_swap_account_metas_10k() {
             source_token_account: Pubkey::new_unique(),
             destination_token_account: Pubkey::new_unique(),
             token_transfer_authority: user,
+            user: solana_sdk::pubkey::Pubkey::default(),
+            payer: solana_sdk::pubkey::Pubkey::default(),
             quote_mint_to_referrer: None,
             jupiter_program_id: &jup_id,
             missing_dynamic_accounts_as_default: false,
@@ -179,6 +184,7 @@ fn monotonicity_buy_crime_100_steps() {
         let q = amm.quote(&QuoteParams {
             amount, input_mint: NATIVE_MINT, output_mint: CRIME_MINT,
             swap_mode: SwapMode::ExactIn,
+            fee_mode: jupiter_amm_interface::FeeMode::Normal,
         }).unwrap();
 
         assert!(q.out_amount >= prev,
@@ -197,6 +203,7 @@ fn monotonicity_sell_crime_100_steps() {
         let q = amm.quote(&QuoteParams {
             amount, input_mint: CRIME_MINT, output_mint: NATIVE_MINT,
             swap_mode: SwapMode::ExactIn,
+            fee_mode: jupiter_amm_interface::FeeMode::Normal,
         }).unwrap();
 
         assert!(q.out_amount >= prev,
@@ -215,6 +222,7 @@ fn monotonicity_buy_fraud_100_steps() {
         let q = amm.quote(&QuoteParams {
             amount, input_mint: NATIVE_MINT, output_mint: FRAUD_MINT,
             swap_mode: SwapMode::ExactIn,
+            fee_mode: jupiter_amm_interface::FeeMode::Normal,
         }).unwrap();
 
         assert!(q.out_amount >= prev);
@@ -232,6 +240,7 @@ fn monotonicity_sell_fraud_100_steps() {
         let q = amm.quote(&QuoteParams {
             amount, input_mint: FRAUD_MINT, output_mint: NATIVE_MINT,
             swap_mode: SwapMode::ExactIn,
+            fee_mode: jupiter_amm_interface::FeeMode::Normal,
         }).unwrap();
 
         assert!(q.out_amount >= prev);
@@ -248,6 +257,7 @@ fn monotonicity_vault_divide() {
         let q = amm.quote(&QuoteParams {
             amount, input_mint: CRIME_MINT, output_mint: PROFIT_MINT,
             swap_mode: SwapMode::ExactIn,
+            fee_mode: jupiter_amm_interface::FeeMode::Normal,
         }).unwrap();
 
         assert!(q.out_amount >= prev);
@@ -264,6 +274,7 @@ fn monotonicity_vault_multiply() {
         let q = amm.quote(&QuoteParams {
             amount, input_mint: PROFIT_MINT, output_mint: CRIME_MINT,
             swap_mode: SwapMode::ExactIn,
+            fee_mode: jupiter_amm_interface::FeeMode::Normal,
         }).unwrap();
 
         assert!(q.out_amount >= prev);
@@ -284,6 +295,7 @@ fn random_sampling_buy_crime_50() {
         let q = amm.quote(&QuoteParams {
             amount, input_mint: NATIVE_MINT, output_mint: CRIME_MINT,
             swap_mode: SwapMode::ExactIn,
+            fee_mode: jupiter_amm_interface::FeeMode::Normal,
         }).unwrap();
 
         let expected = reference_buy_output(RESERVE_SOL, RESERVE_TOKEN, amount, BUY_TAX, LP_FEE_BPS);
@@ -301,6 +313,7 @@ fn random_sampling_sell_crime_50() {
         let q = amm.quote(&QuoteParams {
             amount, input_mint: CRIME_MINT, output_mint: NATIVE_MINT,
             swap_mode: SwapMode::ExactIn,
+            fee_mode: jupiter_amm_interface::FeeMode::Normal,
         }).unwrap();
 
         let expected = reference_sell_output(RESERVE_SOL, RESERVE_TOKEN, amount, SELL_TAX, LP_FEE_BPS);
@@ -318,6 +331,7 @@ fn random_sampling_buy_fraud_50() {
         let q = amm.quote(&QuoteParams {
             amount, input_mint: NATIVE_MINT, output_mint: FRAUD_MINT,
             swap_mode: SwapMode::ExactIn,
+            fee_mode: jupiter_amm_interface::FeeMode::Normal,
         }).unwrap();
 
         let expected = reference_buy_output(RESERVE_SOL, RESERVE_TOKEN, amount, SELL_TAX, LP_FEE_BPS);
@@ -335,6 +349,7 @@ fn random_sampling_sell_fraud_50() {
         let q = amm.quote(&QuoteParams {
             amount, input_mint: FRAUD_MINT, output_mint: NATIVE_MINT,
             swap_mode: SwapMode::ExactIn,
+            fee_mode: jupiter_amm_interface::FeeMode::Normal,
         }).unwrap();
 
         let expected = reference_sell_output(RESERVE_SOL, RESERVE_TOKEN, amount, BUY_TAX, LP_FEE_BPS);
@@ -352,6 +367,7 @@ fn random_sampling_vault_crime_to_profit_50() {
         let q = amm.quote(&QuoteParams {
             amount, input_mint: CRIME_MINT, output_mint: PROFIT_MINT,
             swap_mode: SwapMode::ExactIn,
+            fee_mode: jupiter_amm_interface::FeeMode::Normal,
         }).unwrap();
 
         let expected = compute_vault_output(&CRIME_MINT, &PROFIT_MINT, amount).unwrap();
@@ -369,6 +385,7 @@ fn random_sampling_vault_profit_to_crime_50() {
         let q = amm.quote(&QuoteParams {
             amount, input_mint: PROFIT_MINT, output_mint: CRIME_MINT,
             swap_mode: SwapMode::ExactIn,
+            fee_mode: jupiter_amm_interface::FeeMode::Normal,
         }).unwrap();
 
         let expected = compute_vault_output(&PROFIT_MINT, &CRIME_MINT, amount).unwrap();
@@ -389,6 +406,7 @@ fn parity_dust_100_lamports() {
     let q = amm.quote(&QuoteParams {
         amount, input_mint: NATIVE_MINT, output_mint: CRIME_MINT,
         swap_mode: SwapMode::ExactIn,
+        fee_mode: jupiter_amm_interface::FeeMode::Normal,
     }).unwrap();
 
     let expected = reference_buy_output(RESERVE_SOL, RESERVE_TOKEN, amount, BUY_TAX, LP_FEE_BPS);
@@ -403,6 +421,7 @@ fn parity_max_tax_50pct() {
     let q = amm.quote(&QuoteParams {
         amount, input_mint: NATIVE_MINT, output_mint: CRIME_MINT,
         swap_mode: SwapMode::ExactIn,
+        fee_mode: jupiter_amm_interface::FeeMode::Normal,
     }).unwrap();
 
     let expected = reference_buy_output(RESERVE_SOL, RESERVE_TOKEN, amount, 5000, LP_FEE_BPS);
@@ -417,6 +436,7 @@ fn parity_zero_tax() {
     let q = amm.quote(&QuoteParams {
         amount, input_mint: NATIVE_MINT, output_mint: CRIME_MINT,
         swap_mode: SwapMode::ExactIn,
+        fee_mode: jupiter_amm_interface::FeeMode::Normal,
     }).unwrap();
 
     let expected = reference_buy_output(RESERVE_SOL, RESERVE_TOKEN, amount, 0, LP_FEE_BPS);
@@ -431,6 +451,7 @@ fn parity_sell_dust_100_tokens() {
     let q = amm.quote(&QuoteParams {
         amount, input_mint: CRIME_MINT, output_mint: NATIVE_MINT,
         swap_mode: SwapMode::ExactIn,
+        fee_mode: jupiter_amm_interface::FeeMode::Normal,
     }).unwrap();
 
     let expected = reference_sell_output(RESERVE_SOL, RESERVE_TOKEN, amount, SELL_TAX, LP_FEE_BPS);

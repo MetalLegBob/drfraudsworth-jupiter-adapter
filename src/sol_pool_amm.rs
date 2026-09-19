@@ -463,6 +463,7 @@ mod tests {
             input_mint: NATIVE_MINT,
             output_mint: CRIME_MINT,
             swap_mode: SwapMode::ExactIn,
+            fee_mode: jupiter_amm_interface::FeeMode::Normal,
         }).unwrap();
 
         // Tax = 1 SOL * 400/10000 = 0.04 SOL = 40_000_000 lamports
@@ -486,6 +487,7 @@ mod tests {
             input_mint: CRIME_MINT,
             output_mint: NATIVE_MINT,
             swap_mode: SwapMode::ExactIn,
+            fee_mode: jupiter_amm_interface::FeeMode::Normal,
         }).unwrap();
 
         // After LP fee: effective = 1B * 9900/10000 = 990_000_000
@@ -506,6 +508,7 @@ mod tests {
             input_mint: NATIVE_MINT,
             output_mint: CRIME_MINT,
             swap_mode: SwapMode::ExactIn,
+            fee_mode: jupiter_amm_interface::FeeMode::Normal,
         }).unwrap();
 
         assert_eq!(quote.out_amount, 0);
@@ -521,6 +524,7 @@ mod tests {
             input_mint: CRIME_MINT,
             output_mint: NATIVE_MINT,
             swap_mode: SwapMode::ExactIn,
+            fee_mode: jupiter_amm_interface::FeeMode::Normal,
         }).unwrap();
 
         assert_eq!(quote.out_amount, 0, "should return 0 with zero SOL reserves");
@@ -540,6 +544,7 @@ mod tests {
             input_mint: CRIME_MINT,
             output_mint: NATIVE_MINT,
             swap_mode: SwapMode::ExactIn,
+            fee_mode: jupiter_amm_interface::FeeMode::Normal,
         });
 
         // With zero token reserves, swap returns full SOL reserve.
@@ -556,6 +561,7 @@ mod tests {
             input_mint: NATIVE_MINT,
             output_mint: CRIME_MINT,
             swap_mode: SwapMode::ExactOut,
+            fee_mode: jupiter_amm_interface::FeeMode::Normal,
         });
 
         assert!(result.is_err());
@@ -571,6 +577,7 @@ mod tests {
             input_mint: NATIVE_MINT,
             output_mint: CRIME_MINT,
             swap_mode: SwapMode::ExactIn,
+            fee_mode: jupiter_amm_interface::FeeMode::Normal,
         }) {
             Ok(_) => panic!("quote must be refused during a transition window"),
             Err(e) => e,
@@ -585,6 +592,7 @@ mod tests {
                 input_mint: NATIVE_MINT,
                 output_mint: CRIME_MINT,
                 swap_mode: SwapMode::ExactIn,
+                fee_mode: jupiter_amm_interface::FeeMode::Normal,
             })
             .is_ok());
     }
@@ -599,6 +607,7 @@ mod tests {
             input_mint: FRAUD_MINT,
             output_mint: NATIVE_MINT,
             swap_mode: SwapMode::ExactIn,
+            fee_mode: jupiter_amm_interface::FeeMode::Normal,
         });
         assert!(result.is_err());
 
@@ -608,6 +617,7 @@ mod tests {
             input_mint: NATIVE_MINT,
             output_mint: FRAUD_MINT,
             swap_mode: SwapMode::ExactIn,
+            fee_mode: jupiter_amm_interface::FeeMode::Normal,
         });
         assert!(result.is_err());
     }
@@ -648,6 +658,7 @@ mod tests {
             input_mint: NATIVE_MINT,
             output_mint: CRIME_MINT,
             swap_mode: SwapMode::ExactIn,
+            fee_mode: jupiter_amm_interface::FeeMode::Normal,
         }).unwrap();
         assert_eq!(buy_quote.fee_pct, Decimal::from(500u32) / Decimal::from(10_000u32));
 
@@ -657,6 +668,7 @@ mod tests {
             input_mint: CRIME_MINT,
             output_mint: NATIVE_MINT,
             swap_mode: SwapMode::ExactIn,
+            fee_mode: jupiter_amm_interface::FeeMode::Normal,
         }).unwrap();
         assert_eq!(sell_quote.fee_pct, Decimal::from(1500u32) / Decimal::from(10_000u32));
     }
@@ -671,6 +683,7 @@ mod tests {
             input_mint: NATIVE_MINT,
             output_mint: CRIME_MINT,
             swap_mode: SwapMode::ExactIn,
+            fee_mode: jupiter_amm_interface::FeeMode::Normal,
         }).unwrap();
 
         // 50% tax = 500M lamports tax, 500M to swap

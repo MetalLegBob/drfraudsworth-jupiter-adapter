@@ -34,6 +34,7 @@ fn main() {
         input_mint: NATIVE_MINT,
         output_mint: CRIME_MINT,
         swap_mode: SwapMode::ExactIn,
+        fee_mode: jupiter_amm_interface::FeeMode::Normal,
     }).expect("buy quote failed");
 
     println!("1. Buy CRIME with 1 SOL:");
@@ -51,6 +52,7 @@ fn main() {
         input_mint: CRIME_MINT,
         output_mint: NATIVE_MINT,
         swap_mode: SwapMode::ExactIn,
+        fee_mode: jupiter_amm_interface::FeeMode::Normal,
     }).expect("sell quote failed");
 
     println!("2. Sell 10B CRIME for SOL:");
@@ -70,6 +72,7 @@ fn main() {
         input_mint: CRIME_MINT,
         output_mint: PROFIT_MINT,
         swap_mode: SwapMode::ExactIn,
+        fee_mode: jupiter_amm_interface::FeeMode::Normal,
     }).expect("vault quote failed");
 
     println!("3. Convert 100B CRIME -> PROFIT:");
@@ -88,6 +91,7 @@ fn main() {
         input_mint: PROFIT_MINT,
         output_mint: FRAUD_MINT,
         swap_mode: SwapMode::ExactIn,
+        fee_mode: jupiter_amm_interface::FeeMode::Normal,
     }).expect("reverse vault quote failed");
 
     println!("4. Convert 1B PROFIT -> FRAUD:");

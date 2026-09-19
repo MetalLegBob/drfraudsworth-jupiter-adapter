@@ -1,6 +1,6 @@
 [package]
 name = "drfraudsworth-jupiter-adapter"
-version = "0.1.5"
+version = "0.2.0"
 edition = "2021"
 description = "Jupiter AMM adapter SDK for the Dr. Fraudsworth DEX protocol"
 license = "MIT"
@@ -10,15 +10,16 @@ keywords = ["jupiter", "solana", "dex", "amm"]
 exclude = [".github/", "idl/"]
 
 [dependencies]
-# =0.6.0 confirmed with Jupiter's team (matches their engine and reference
-# implementation). Exact pin because 0.6.1's open solana-* ranges do not
-# fresh-resolve on the solana 2.x crate generation.
-jupiter-amm-interface = "=0.6.0"
+# Match Jupiter's stable adapter API exactly. Cargo.lock pins a compatible
+# Solana 2.x resolution for reproducible consumer builds.
+jupiter-amm-interface = "=0.6.1"
 solana-sdk = "~2.3"
 rust_decimal = "1.36.0"
 ahash = "0.8"
 anyhow = "1"
 sha2 = "0.10"
+
+[workspace]
 
 # NOTE: math-parity tests against the on-chain programs (zero-tolerance
 # SDK-math == on-chain-math proofs) live in the protocol monorepo

@@ -391,6 +391,7 @@ mod tests {
                 input_mint: CRIME_MINT,
                 output_mint: PROFIT_MINT,
                 swap_mode: SwapMode::ExactIn,
+                fee_mode: jupiter_amm_interface::FeeMode::Normal,
             })
             .unwrap();
 
@@ -410,6 +411,7 @@ mod tests {
                 input_mint: PROFIT_MINT,
                 output_mint: FRAUD_MINT,
                 swap_mode: SwapMode::ExactIn,
+                fee_mode: jupiter_amm_interface::FeeMode::Normal,
             })
             .unwrap();
 
@@ -427,6 +429,7 @@ mod tests {
             input_mint: CRIME_MINT,
             output_mint: PROFIT_MINT,
             swap_mode: SwapMode::ExactIn,
+            fee_mode: jupiter_amm_interface::FeeMode::Normal,
         });
 
         assert!(result.is_err(), "99 CRIME / 100 = 0 PROFIT should error");
@@ -531,6 +534,7 @@ mod tests {
             input_mint: CRIME_MINT,
             output_mint: PROFIT_MINT,
             swap_mode: SwapMode::ExactOut,
+            fee_mode: jupiter_amm_interface::FeeMode::Normal,
         });
 
         assert!(result.is_err());
@@ -546,6 +550,7 @@ mod tests {
             input_mint: FRAUD_MINT, // Wrong -- expects CRIME
             output_mint: PROFIT_MINT,
             swap_mode: SwapMode::ExactIn,
+            fee_mode: jupiter_amm_interface::FeeMode::Normal,
         });
 
         assert!(result.is_err());
@@ -575,6 +580,7 @@ mod tests {
             input_mint: CRIME_MINT,
             output_mint: PROFIT_MINT,
             swap_mode: SwapMode::ExactIn,
+            fee_mode: jupiter_amm_interface::FeeMode::Normal,
         });
         assert!(result.is_err(), "quote above vault balance must error");
 
@@ -586,6 +592,7 @@ mod tests {
                 input_mint: CRIME_MINT,
                 output_mint: PROFIT_MINT,
                 swap_mode: SwapMode::ExactIn,
+                fee_mode: jupiter_amm_interface::FeeMode::Normal,
             })
             .unwrap();
         assert_eq!(quote.out_amount, 200);
@@ -641,6 +648,7 @@ mod tests {
             input_mint: CRIME_MINT,
             output_mint: PROFIT_MINT,
             swap_mode: SwapMode::ExactIn,
+            fee_mode: jupiter_amm_interface::FeeMode::Normal,
         });
         assert!(result.is_err());
 
@@ -651,6 +659,7 @@ mod tests {
                 input_mint: CRIME_MINT,
                 output_mint: PROFIT_MINT,
                 swap_mode: SwapMode::ExactIn,
+                fee_mode: jupiter_amm_interface::FeeMode::Normal,
             })
             .is_ok());
     }

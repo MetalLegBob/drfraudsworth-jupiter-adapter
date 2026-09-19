@@ -147,6 +147,7 @@ fn full_lifecycle_crime_pool_buy() {
         amount: 1_000_000_000,
         input_mint: NATIVE_MINT, output_mint: CRIME_MINT,
         swap_mode: SwapMode::ExactIn,
+        fee_mode: jupiter_amm_interface::FeeMode::Normal,
     }).unwrap();
 
     assert!(q.out_amount > 0, "Should produce output after full lifecycle");
@@ -177,6 +178,7 @@ fn full_lifecycle_fraud_pool_sell() {
         amount: 10_000_000_000, // 10K tokens
         input_mint: FRAUD_MINT, output_mint: NATIVE_MINT,
         swap_mode: SwapMode::ExactIn,
+        fee_mode: jupiter_amm_interface::FeeMode::Normal,
     }).unwrap();
 
     assert!(q.out_amount > 0);
@@ -309,11 +311,13 @@ fn clone_amm_preserves_state() {
     let q_original = amm.quote(&QuoteParams {
         amount: 1_000_000_000, input_mint: NATIVE_MINT, output_mint: CRIME_MINT,
         swap_mode: SwapMode::ExactIn,
+        fee_mode: jupiter_amm_interface::FeeMode::Normal,
     }).unwrap();
 
     let q_cloned = cloned.quote(&QuoteParams {
         amount: 1_000_000_000, input_mint: NATIVE_MINT, output_mint: CRIME_MINT,
         swap_mode: SwapMode::ExactIn,
+        fee_mode: jupiter_amm_interface::FeeMode::Normal,
     }).unwrap();
 
     assert_eq!(q_original.out_amount, q_cloned.out_amount, "Clone should produce same output");
@@ -331,6 +335,7 @@ fn quote_many_inputs_no_accumulation() {
         let _ = amm.quote(&QuoteParams {
             amount, input_mint: NATIVE_MINT, output_mint: CRIME_MINT,
             swap_mode: SwapMode::ExactIn,
+            fee_mode: jupiter_amm_interface::FeeMode::Normal,
         });
     }
 
@@ -339,6 +344,7 @@ fn quote_many_inputs_no_accumulation() {
         let _ = vault.quote(&QuoteParams {
             amount, input_mint: CRIME_MINT, output_mint: PROFIT_MINT,
             swap_mode: SwapMode::ExactIn,
+            fee_mode: jupiter_amm_interface::FeeMode::Normal,
         });
     }
 }
@@ -354,6 +360,7 @@ fn max_tax_50pct_still_produces_output() {
     let q = amm.quote(&QuoteParams {
         amount: 1_000_000_000, input_mint: NATIVE_MINT, output_mint: CRIME_MINT,
         swap_mode: SwapMode::ExactIn,
+        fee_mode: jupiter_amm_interface::FeeMode::Normal,
     }).unwrap();
 
     assert!(q.out_amount > 0);
@@ -368,11 +375,13 @@ fn zero_tax_higher_output() {
     let q_taxed = amm_taxed.quote(&QuoteParams {
         amount: 1_000_000_000, input_mint: NATIVE_MINT, output_mint: CRIME_MINT,
         swap_mode: SwapMode::ExactIn,
+        fee_mode: jupiter_amm_interface::FeeMode::Normal,
     }).unwrap();
 
     let q_free = amm_no_tax.quote(&QuoteParams {
         amount: 1_000_000_000, input_mint: NATIVE_MINT, output_mint: CRIME_MINT,
         swap_mode: SwapMode::ExactIn,
+        fee_mode: jupiter_amm_interface::FeeMode::Normal,
     }).unwrap();
 
     assert!(q_free.out_amount > q_taxed.out_amount, "Zero-tax should produce more output");

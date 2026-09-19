@@ -172,6 +172,7 @@ fn crime_pool_buy_quote_real_data() {
         amount: 1_000_000_000, // 1 SOL
         input_mint: NATIVE_MINT, output_mint: CRIME_MINT,
         swap_mode: SwapMode::ExactIn,
+        fee_mode: jupiter_amm_interface::FeeMode::Normal,
     }).unwrap();
 
     eprintln!("CRIME buy 1 SOL: {} tokens out", q.out_amount);
@@ -201,6 +202,7 @@ fn crime_pool_sell_quote_real_data() {
         amount: 1_000_000, // 1 CRIME token (6 decimals)
         input_mint: CRIME_MINT, output_mint: NATIVE_MINT,
         swap_mode: SwapMode::ExactIn,
+        fee_mode: jupiter_amm_interface::FeeMode::Normal,
     }).unwrap();
 
     eprintln!("CRIME sell 1 token: {} lamports out", q.out_amount);
@@ -229,6 +231,7 @@ fn fraud_pool_buy_quote_real_data() {
         amount: 1_000_000_000,
         input_mint: NATIVE_MINT, output_mint: FRAUD_MINT,
         swap_mode: SwapMode::ExactIn,
+        fee_mode: jupiter_amm_interface::FeeMode::Normal,
     }).unwrap();
 
     eprintln!("FRAUD buy 1 SOL: {} tokens out", q.out_amount);
@@ -257,6 +260,7 @@ fn fraud_pool_sell_quote_real_data() {
         amount: 1_000_000_000, // 1000 FRAUD tokens
         input_mint: FRAUD_MINT, output_mint: NATIVE_MINT,
         swap_mode: SwapMode::ExactIn,
+        fee_mode: jupiter_amm_interface::FeeMode::Normal,
     }).unwrap();
 
     eprintln!("FRAUD sell 1000 tokens: {} lamports out", q.out_amount);
@@ -304,6 +308,7 @@ fn vault_quotes_after_real_update() {
         let q = amm.quote(&QuoteParams {
             amount: *amount, input_mint: *input, output_mint: *output,
             swap_mode: SwapMode::ExactIn,
+            fee_mode: jupiter_amm_interface::FeeMode::Normal,
         }).unwrap();
 
         eprintln!("{}: {} in → {} out", label, amount, q.out_amount);
@@ -376,6 +381,8 @@ fn get_swap_and_account_metas_buy_real_data() {
         source_token_account: user_wsol,
         destination_token_account: user_token,
         token_transfer_authority: user,
+        user: solana_sdk::pubkey::Pubkey::default(),
+        payer: solana_sdk::pubkey::Pubkey::default(),
         quote_mint_to_referrer: None,
         jupiter_program_id: &Pubkey::new_unique(),
         missing_dynamic_accounts_as_default: false,
@@ -430,6 +437,8 @@ fn real_data_metas_equal_constant_builder_metas() {
             source_token_account: wsol_ata,
             destination_token_account: token_ata,
             token_transfer_authority: user,
+            user: solana_sdk::pubkey::Pubkey::default(),
+            payer: solana_sdk::pubkey::Pubkey::default(),
             quote_mint_to_referrer: None,
             jupiter_program_id: &jup,
             missing_dynamic_accounts_as_default: false,
@@ -447,6 +456,8 @@ fn real_data_metas_equal_constant_builder_metas() {
             source_token_account: token_ata,
             destination_token_account: wsol_ata,
             token_transfer_authority: user,
+            user: solana_sdk::pubkey::Pubkey::default(),
+            payer: solana_sdk::pubkey::Pubkey::default(),
             quote_mint_to_referrer: None,
             jupiter_program_id: &jup,
             missing_dynamic_accounts_as_default: false,
