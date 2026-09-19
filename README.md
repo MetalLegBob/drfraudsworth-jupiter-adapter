@@ -10,12 +10,15 @@ This repository contains the standalone adapter crate. The on-chain programs, An
 
 - Exact quote accuracy — the SDK's math modules are copies of the on-chain math, proven equal by zero-tolerance parity tests in the protocol repository, and validated here against embedded mainnet account data
 - Zero network calls in any method (pool state is parsed from Jupiter-provided account snapshots; all protocol-singleton addresses are hardcoded)
-- Supports all 8 swap directions across 6 Amm instances
-- Generic pool construction: `SolPoolAmm` derives mints, vaults, and orientation from parsed `PoolState` account data, so future SOL-quoted pools construct without SDK changes
+- Supports the existing SOL pools, all four vault conversions, and generic SPL-quoted faction pools
+- Generic pool construction: `FactionPoolAmm` (the neutral alias for `SolPoolAmm`) derives mints, vaults, token programs, reserves, lifecycle flags, and orientation from AMM-owned `PoolState` data
+- Pause-aware routing: quotes are inactive during the manual pause, before `pause_end_slot`, for locked/uninitialized pools, or until fresh account snapshots have been applied
 
 ## Pool Types
 
-Dr. Fraudsworth exposes 6 Amm instances to Jupiter:
+The bootstrap catalog exposes the six existing instances below. AMM-owned
+`PoolState` discovery adds new SOL or SPL quote pools without another static
+allowlist entry.
 
 | # | Instance | Type | Key Source | Reserves | Fees |
 |---|----------|------|------------|----------|------|
@@ -32,7 +35,8 @@ Dr. Fraudsworth exposes 6 Amm instances to Jupiter:
 
 ## Pool Discovery
 
-Jupiter integrators call these factory functions at startup to register all Dr. Fraudsworth pools:
+Jupiter integrators may use the bootstrap factories for the current deployed
+set, but generic discovery should scan the AMM program's `PoolState` accounts:
 
 ```rust
 use drfraudsworth_jupiter_adapter::{known_instances, known_sol_pool_keys, all_pool_keys};
@@ -51,28 +55,42 @@ let all_keys: Vec<Pubkey> = all_pool_keys();
 - `known_instances()` -- Returns 4 pre-constructed `VaultAmm` instances (fixed-pool protocol, no `getProgramAccounts` needed).
 - `all_pool_keys()` -- Convenience: all 6 instance keys combined.
 
-### Automatic discovery of future pools
+### Automatic PoolState discovery
 
 `SolPoolAmm::from_keyed_account` is safe to feed arbitrary accounts and constructs generically:
 
 1. Rejects accounts not owned by the AMM program
 2. Rejects data without the `PoolState` Anchor discriminator (`sha256("account:PoolState")[0..8]`)
-3. Rejects pools that are not SOL-quoted or whose token side is not CRIME/FRAUD
-4. Derives mints, vaults, reserves, and orientation entirely from the account bytes
+3. Requires the exact deployed 224-byte layout, canonical mint order, canonical
+   pool PDA, an initialized/unlocked lifecycle, supported token programs, and
+   exactly one CRIME/FRAUD side
+4. Derives mints, vaults, reserves, token programs, and orientation entirely
+   from the account bytes
+5. Selects the existing Tax SOL lane when the quote is WSOL, otherwise the Tax
+   SPL lane
 
-This means the constructor also works with scan-based market discovery (e.g. `getProgramAccounts` on the AMM program filtered by the `PoolState` discriminator): a new SOL-quoted pool created by the protocol would construct with no SDK changes. Note that pool accounts are **owned by the AMM program** while `program_id()` returns the **Tax Program** (the swap entry point) — see Program IDs below.
+Use `AmmProgramIdToLabel::PROGRAM_ID_TO_LABELS` (AMM program ID) or an equivalent
+`getProgramAccounts` scan filtered by the `PoolState` discriminator and 224-byte
+data size. Pool accounts are **owned and discovered under the AMM program**;
+`program_id()` deliberately returns the **Tax Program**, because that is the
+swap entry point that CPI-calls the AMM. This discovery/execution split is
+covered by unit tests.
 
 ## Fee Structure
 
-### SOL Pools (CRIME/SOL, FRAUD/SOL)
+### Faction Pools
 
 SOL pool swaps have two fee components:
 
 1. **LP fee:** 1% (100 BPS), fixed, deducted from swap amount
 2. **Dynamic tax:** 1-4% (cheap side) or 11-14% (expensive side), VRF-randomized each epoch (~30 min). Tax is split across staking rewards (71%), Carnage Fund (24%), and treasury (5%)
 
-**Buy (SOL -> token):** Tax deducted from SOL input BEFORE the AMM swap.
-**Sell (token -> SOL):** Tax deducted from SOL output AFTER the AMM swap.
+**Buy (quote -> faction):** Tax deducted from quote input before the AMM swap.
+**Sell (faction -> quote):** Tax deducted from quote output after the AMM swap.
+
+SPL quote mints may use classic SPL Token or Token-2022. Token-2022 quotes are
+accepted only when current and scheduled transfer fees are zero and the quote
+transfer hook is unarmed, preserving nominal reserve and tax arithmetic.
 
 Tax rates change every epoch (~30 minutes). Jupiter's `update()` method refreshes EpochState to get current rates. Stale rates between quote and execution are handled by on-chain slippage protection (`minimum_output`).
 
@@ -100,6 +118,12 @@ This creates arbitrage opportunities between the two pools that Jupiter can rout
 
 The `EpochState` PDA is declared in `get_accounts_to_update()`, so Jupiter automatically refreshes it and passes the latest state to `update()`.
 
+`update()` also reads the clock and the SPL quote mint (when applicable).
+`is_active()` becomes true only after a successful refresh, with an initialized
+and unlocked pool, initialized EpochState, no manual pause, and
+`clock.slot >= pause_end_slot` (the boundary is inclusive). Vault conversions
+remain independent of the trading pause.
+
 ## Account Metas
 
 Each instruction type requires a specific set of accounts. Pool-specific accounts (pool PDA, mints, vaults, orientation) are derived from the parsed `PoolState`; protocol singletons (authorities, staking, treasury, programs) are hardcoded mainnet addresses. Zero network calls.
@@ -115,6 +139,13 @@ Named accounts: user, epoch_state, swap_authority, tax_authority, pool, pool_vau
 21 named accounts + 4 transfer hook accounts = **25 total**
 
 Same as buy, plus `wsol_intermediary` PDA (account #16). The sell path routes SOL through an intermediary WSOL account before closing it back to the user.
+
+### SwapSplBuy / SwapSplSell
+
+SPL buys use 17 named accounts plus four faction-hook accounts (**21 total**).
+SPL sells use 18 named accounts plus four faction-hook accounts (**22 total**).
+The sell path places the Tax program's canonical sweep ATA in the positional
+quote-output slot and supplies Jupiter's destination quote account separately.
 
 ### Vault Convert (token <-> token)
 
@@ -151,6 +182,7 @@ for (key, amm) in &vault_instances {
         input_mint: amm.get_reserve_mints()[0],
         output_mint: amm.get_reserve_mints()[1],
         swap_mode: SwapMode::ExactIn,
+        fee_mode: jupiter_amm_interface::FeeMode::Normal,
     }).unwrap();
     println!("{}: {} -> {}", key, quote.in_amount, quote.out_amount);
 }
@@ -164,7 +196,9 @@ cargo run --example quote_example
 
 ## Interface Version
 
-The crate pins `jupiter-amm-interface = "=0.6.0"`, confirmed with Jupiter's team and matching [jup-ag/rust-amm-implementation](https://github.com/jup-ag/rust-amm-implementation). The pin is exact because 0.6.1's open solana-* ranges do not fresh-resolve on the solana 2.x crate generation (its `solana_account_decoder::encode_ui_account` import only exists in the 3.x series). The library itself never constructs `QuoteParams`/`SwapParams`, so it compiles unchanged against 0.6.1 whenever Jupiter's engine moves.
+The adapter uses stable `jupiter-amm-interface` 0.6.1, including `FeeMode` and
+the `user`/`payer` swap fields. The dependency is an exact crates.io pin and
+the committed lockfile preserves the verified Solana 2.x dependency graph.
 
 ## Program IDs
 
@@ -172,7 +206,7 @@ Jupiter needs to know which programs are called for each swap type:
 
 | Program | Address | Called For |
 |---------|---------|-----------|
-| Tax Program | `43fZGRtmEsP7ExnJE1dbTbNjaP1ncvVmMPusSeksWGEj` | SOL pool swaps (CPI to AMM internally) |
+| Tax Program | `43fZGRtmEsP7ExnJE1dbTbNjaP1ncvVmMPusSeksWGEj` | SOL and SPL pool swaps (CPI to AMM internally) |
 | Conversion Vault | `5uawA6ehYTu69Ggvm3LSK84qFawPKxbWgfngwj15NRJ` | Vault conversions |
 | AMM Program | `5JsSAL3kJDUWD4ZveYXYZmgm1eVqueesTZVdAvtZg8cR` | Owns PoolState accounts; called via CPI by Tax Program (not directly by Jupiter) |
 | Transfer Hook | `CiQPQrmQh6BPhb9k7dFnsEs5gKPgdrvNKFc5xie5xVGd` | Called by Token-2022 during transfers |
@@ -208,14 +242,14 @@ Full address set is in `deployments/mainnet.json` in the protocol repository. Ke
 
 ## Jupiter Integration Notes
 
-- **Swap variant:** Uses `Swap::TokenSwap` as placeholder. Jupiter assigns the real variant during integration review.
+- **Swap variant:** Stable interface 0.6.1 has no protocol-specific variant, so the adapter returns `Swap::TokenSwap` as the integration placeholder. Jupiter's encoder must map direction and quote type to `swap_sol_buy`, `swap_sol_sell`, `swap_spl_buy`, or `swap_spl_sell`. `instruction::TaxSwapLane` exports the reviewed lane selection, Anchor discriminators, and 24-byte argument encoding; golden tests derive every discriminator from its Anchor preimage.
 - **Vault instance keying:** Synthetic PDAs derived from `[b"jup_vault", input_mint, output_mint]` via `Pubkey::find_program_address`. These are not real on-chain accounts -- they exist solely to give each VaultAmm instance a unique key.
 - **`supports_exact_out`:** Returns `false` for all instances. Integer division in vault conversions loses information, and SOL pool exact-out would require iterative solving.
 - **No network calls:** All methods (`quote`, `get_swap_and_account_metas`, `get_accounts_to_update`) operate on Jupiter-provided account snapshots and constants. Jupiter handles account fetching externally.
 - **WSOL wrapping:** Jupiter handles SOL <-> WSOL wrapping/unwrapping. The SDK returns only the Tax Program swap instruction.
 - **`unidirectional()`:** Returns `true` for VaultAmm, `false` (default) for SolPoolAmm. Jupiter uses this to avoid routing backwards through vault instances.
 - **Mint-pair validation:** `quote()` and `get_swap_and_account_metas()` reject requests whose mints do not match the instance's pool.
-- **Transition-gate aware:** the protocol's upcoming epoch-transition gate (Layer-3) reverts public swaps for a few slots around each epoch flip while the protocol's internal arbitrage executes. `update()` reads the `transition_in_progress` flag from EpochState and `quote()` refuses while a window is open, so the router never routes into a known revert. On current mainnet the flag byte is zeroed reserved padding, so behavior is unchanged until the gate feature deploys.
+- **Pause-aware:** `update()` reads `pause_end_slot`, `trading_paused`, and initialization state from EpochState plus the current clock. Quotes refuse while the route is inactive.
 - **Vault liquidity cap:** `VaultAmm::update()` reads the output-side vault token account balance, and quotes exceeding available liquidity are rejected rather than quoted-then-failed on-chain.
 - **`program_dependencies()`:** returns the AMM, Staking, and Transfer Hook programs for SolPool swaps (Transfer Hook for vault conversions) so test harnesses know which dependent programs to load.
 - **`underlying_liquidities()`:** the two `*->PROFIT` vault instances report the same underlying PROFIT vault account, exposing their shared liquidity to the routing engine.
@@ -223,9 +257,10 @@ Full address set is in `deployments/mainnet.json` in the protocol repository. Ke
 ## Testing
 
 ```bash
-# Full standalone suite: unit tests + construction, edge gauntlet,
-# instruction structure, mainnet-data validation, extended quoting
-cargo test
+# Reproducible standalone verification
+cargo test --locked
+cargo clippy --all-targets --locked -- -D warnings
+cargo fmt --check
 
 # Run the quote example
 cargo run --example quote_example
@@ -235,7 +270,11 @@ See [TESTING.md](./TESTING.md) for the full suite breakdown. CI runs the suite p
 
 The mainnet-data validation suite parses real (hex-embedded) mainnet account snapshots and includes an equivalence proof that account lists built from parsed on-chain data are byte-identical to the constant-based builders.
 
-Math-parity tests — proving SDK quote math equals on-chain program math with zero tolerance — live in the protocol repository (`sdk/jupiter-adapter/tests/parity_*.rs` there), because they compile against the on-chain program crates directly.
+The standalone suite currently contains 241 deterministic tests. Cross-crate
+proofs live in the protocol repository because they compile against the real
+Anchor programs: 37 zero-tolerance quote-math parity tests, direct adapter-to-
+Anchor SPL ABI parity across both factions, orientations, and quote-token
+programs, plus 64 real-SBF Tax -> AMM SPL CPI tests.
 
 ## License
 
