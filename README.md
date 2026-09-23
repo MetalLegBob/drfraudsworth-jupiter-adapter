@@ -287,9 +287,12 @@ cargo run --example quote_example
 
 See [TESTING.md](./TESTING.md) for the full suite breakdown. CI runs the suite plus clippy on every push.
 
-The mainnet-data validation suite parses real (hex-embedded) mainnet account snapshots and includes an equivalence proof that account lists built from parsed on-chain data are byte-identical to the constant-based builders.
+The mainnet-data suites parse real, hex-embedded account snapshots. They cover
+the original SOL pools, all four live SPL pilot pools in both directions and
+orientations, exact snapshot quotes, and account-list construction. The pilot
+addresses are fixtures only; production discovery remains PoolState-driven.
 
-The standalone suite currently contains 245 deterministic tests. Cross-crate
+The standalone suite currently contains 246 deterministic tests. Cross-crate
 proofs live in the protocol repository because they compile against the real
 Anchor programs: 37 zero-tolerance quote-math parity tests, direct adapter-to-
 Anchor SPL ABI parity across both factions, orientations, and quote-token

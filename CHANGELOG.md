@@ -10,6 +10,8 @@ All notable changes to this crate are recorded here.
 - SPL Tax buy/sell account builders for either PoolState orientation.
 - Pause-aware routing and amount-preserving Token-2022 quote-mint validation.
 - Stable Tax lane discriminator and argument encoding helpers.
+- Deterministic coverage of all four live SPL pilot PoolStates in both swap
+  directions and both pool orientations.
 
 ### Changed
 

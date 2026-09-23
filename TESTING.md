@@ -19,12 +19,13 @@ and package verification on every push and pull request.
 | `tests/test_edge_gauntlet.rs` | 29 | Boundary amounts, extreme tax rates, dust, overflow guards |
 | `tests/test_instruction_structure.rs` | 15 | Exact account ordering, writability, and signer flags for every instruction |
 | `tests/test_mainnet_validation.rs` | 15 | Real mainnet account data (hex-embedded, no RPC): parsing, quoting with live reserves, discriminator match, pause fields, and byte-identical generic/constant SOL account building |
+| `tests/live_spl_pool_snapshots.rs` | 1 | All four live SPL pilot PoolStates: generic discovery, both orientations and directions, exact snapshot quotes, Tax lane selection, and native account shapes |
 | `tests/test_quoting_extended.rs` | 20 | Quoting properties: monotonicity, parity with reference values, speed |
 | `tests/vault_mint_pair.rs` | 4 | Only the four on-chain conversion edges construct; mismatched legs fail while CRIME/FRAUD routes compose through PROFIT |
 
-Mainnet snapshots are hex-embedded at fixed fetch dates (see comments in
-`test_mainnet_validation.rs`), keeping the suite deterministic and offline —
-no network calls anywhere, matching Jupiter's integration requirements.
+Mainnet snapshots are hex-embedded at fixed fetch dates (see comments in the
+two snapshot suites), keeping the suite deterministic and offline. Pilot pool
+addresses are test fixtures, not production admission logic.
 
 ## Math-parity suite (protocol repository)
 
