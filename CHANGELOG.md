@@ -26,6 +26,8 @@ All notable changes to this crate are recorded here.
   unchanged: CRIME/FRAUD routes compose through PROFIT as two valid vault legs.
 - Fail closed for non-transferable, default-frozen or currently paused
   Token-2022 quote mints.
+- Encode the required trailing `is_crime` argument for SOL Tax lanes while
+  preserving the two-argument SPL Tax layout.
 
 ## [0.1.5] - 2026-07-18
 
