@@ -46,3 +46,7 @@ pub const SWAP_SOL_BUY_DISCRIMINATOR: [u8; 8] = [158, 213, 169, 65, 11, 116, 176
 pub const SWAP_SOL_SELL_DISCRIMINATOR: [u8; 8] = [136, 242, 218, 149, 17, 222, 250, 240];
 pub const SWAP_SPL_BUY_DISCRIMINATOR: [u8; 8] = [145, 254, 202, 19, 150, 31, 185, 146];
 pub const SWAP_SPL_SELL_DISCRIMINATOR: [u8; 8] = [250, 17, 196, 68, 180, 202, 218, 155];
+
+/// Anchor discriminator for Conversion Vault `convert_v2`.
+/// Computed as `sha256("global:convert_v2")[0..8]`.
+pub const CONVERT_V2_DISCRIMINATOR: [u8; 8] = [2, 169, 12, 141, 64, 38, 20, 20];

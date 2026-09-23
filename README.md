@@ -181,6 +181,13 @@ Named accounts: user, vault_config, user_input_account, user_output_account, inp
 
 Hook accounts: 4 for input mint + 4 for output mint (both are Token-2022 mints with transfer hooks).
 
+Vault routes must call `convert_v2`; the legacy `convert` entrypoint is not an
+integration target. `instruction::VaultConvertV2` encodes its 32-byte payload:
+the discriminator followed by `amount_in`, `minimum_output`, and `pre_balance`.
+Use exact mode for a direct vault leg. When a preceding route leg deposits into
+the vault input ATA, use delta mode with the pre-route balance so the conversion
+cannot spend tokens the user already held.
+
 ### Transfer Hook Accounts (per mint)
 
 Each Token-2022 mint has 4 deterministic hook accounts:
@@ -270,7 +277,7 @@ Full address set is in `deployments/mainnet.json` in the protocol repository. Ke
 
 ## Jupiter Integration Notes
 
-- **Swap variant:** Published interface 0.6.1 has no protocol-specific or generic pre-integration variant. The current `Swap::TokenSwap` return is a review placeholder only and must not be interpreted as a production SPL Token Swap route. Jupiter's final integration must allocate the real variant/processor and map direction and quote type to `swap_sol_buy`, `swap_sol_sell`, `swap_spl_buy`, or `swap_spl_sell`. `instruction::TaxSwapLane` exports the reviewed lane selection and Anchor discriminators. SPL lanes encode the discriminator plus `amount_in` and `minimum_output` (24 bytes); SOL lanes append `is_crime` (25 bytes). Golden tests derive every discriminator from its Anchor preimage and pin both layouts.
+- **Swap variant:** Published interface 0.6.1 has no protocol-specific or generic pre-integration variant. The current `Swap::TokenSwap` return is a review placeholder only and must not be interpreted as a production SPL Token Swap route. Jupiter's final integration must allocate the real variant/processor and map direction and quote type to `swap_sol_buy`, `swap_sol_sell`, `swap_spl_buy`, `swap_spl_sell`, or vault `convert_v2`. `instruction::TaxSwapLane` and `instruction::VaultConvertV2` export the reviewed encoders. SPL Tax lanes are 24 bytes; SOL Tax lanes append `is_crime` and are 25 bytes; `convert_v2` is 32 bytes. Golden tests derive the discriminators from their Anchor preimages and pin every layout.
 - **Vault instance keying:** Synthetic PDAs derived from `[b"jup_vault", input_mint, output_mint]` via `Pubkey::find_program_address`. These are not real on-chain accounts -- they exist solely to give each VaultAmm instance a unique key.
 - **`supports_exact_out`:** Returns `false` for all instances. Integer division in vault conversions loses information, and SOL pool exact-out would require iterative solving.
 - **No network calls:** All methods (`quote`, `get_swap_and_account_metas`, `get_accounts_to_update`) operate on Jupiter-provided account snapshots and constants. Jupiter handles account fetching externally.

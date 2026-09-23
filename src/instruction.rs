@@ -2,8 +2,8 @@
 
 use crate::accounts::addresses::NATIVE_MINT;
 use crate::constants::{
-    SWAP_SOL_BUY_DISCRIMINATOR, SWAP_SOL_SELL_DISCRIMINATOR, SWAP_SPL_BUY_DISCRIMINATOR,
-    SWAP_SPL_SELL_DISCRIMINATOR,
+    CONVERT_V2_DISCRIMINATOR, SWAP_SOL_BUY_DISCRIMINATOR, SWAP_SOL_SELL_DISCRIMINATOR,
+    SWAP_SPL_BUY_DISCRIMINATOR, SWAP_SPL_SELL_DISCRIMINATOR,
 };
 use solana_sdk::pubkey::Pubkey;
 
@@ -59,6 +59,34 @@ impl TaxSwapLane {
         if matches!(self, Self::SolBuy | Self::SolSell) {
             data.push(u8::from(is_crime));
         }
+        data
+    }
+}
+
+/// Conversion Vault `convert_v2` instruction encoding.
+///
+/// Direct vault swaps use [`Self::encode_exact`]. An atomic route whose prior
+/// leg deposits into the vault input ATA must use [`Self::encode_delta`] with
+/// the ATA's pre-route balance; that preserves tokens the user already held.
+pub struct VaultConvertV2;
+
+impl VaultConvertV2 {
+    /// Encode an exact-input vault conversion.
+    pub fn encode_exact(amount_in: u64, minimum_output: u64) -> Vec<u8> {
+        Self::encode(amount_in, minimum_output, 0)
+    }
+
+    /// Encode delta mode for a downstream leg in an atomic route.
+    pub fn encode_delta(minimum_output: u64, pre_balance: u64) -> Vec<u8> {
+        Self::encode(0, minimum_output, pre_balance)
+    }
+
+    fn encode(amount_in: u64, minimum_output: u64, pre_balance: u64) -> Vec<u8> {
+        let mut data = Vec::with_capacity(32);
+        data.extend_from_slice(&CONVERT_V2_DISCRIMINATOR);
+        data.extend_from_slice(&amount_in.to_le_bytes());
+        data.extend_from_slice(&minimum_output.to_le_bytes());
+        data.extend_from_slice(&pre_balance.to_le_bytes());
         data
     }
 }
@@ -147,5 +175,19 @@ mod tests {
             TaxSwapLane::for_mints(&spl_quote, &faction, &faction, &faction),
             None
         );
+    }
+
+    #[test]
+    fn vault_convert_v2_encodes_exact_and_delta_modes() {
+        let exact = VaultConvertV2::encode_exact(11, 22);
+        assert_eq!(&exact[..8], &CONVERT_V2_DISCRIMINATOR);
+        assert_eq!(&exact[8..16], &11_u64.to_le_bytes());
+        assert_eq!(&exact[16..24], &22_u64.to_le_bytes());
+        assert_eq!(&exact[24..32], &0_u64.to_le_bytes());
+
+        let delta = VaultConvertV2::encode_delta(33, 44);
+        assert_eq!(&delta[8..16], &0_u64.to_le_bytes());
+        assert_eq!(&delta[16..24], &33_u64.to_le_bytes());
+        assert_eq!(&delta[24..32], &44_u64.to_le_bytes());
     }
 }
