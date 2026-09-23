@@ -76,13 +76,15 @@ impl Amm for VaultAmm {
                 .parse()
                 .map_err(|_| anyhow!("Invalid output_mint pubkey: {}", output_mint_str))?;
 
+            let output_vault =
+                conversion_output_vault(&input_mint, &output_mint).ok_or_else(|| {
+                    anyhow!(
+                        "VaultAmm: unsupported conversion direction {} -> {}",
+                        input_mint,
+                        output_mint,
+                    )
+                })?;
             let _label_suffix = format_label(&input_mint, &output_mint);
-
-            // Both mints must be protocol tokens with a known vault account.
-            vault_for_mint(&input_mint)
-                .ok_or_else(|| anyhow!("VaultAmm: unsupported input mint {}", input_mint))?;
-            let output_vault = vault_for_mint(&output_mint)
-                .ok_or_else(|| anyhow!("VaultAmm: unsupported output mint {}", output_mint))?;
 
             return Ok(Self {
                 key: keyed_account.key,
@@ -150,15 +152,7 @@ impl Amm for VaultAmm {
             return Err(anyhow!("ExactOut not supported for vault conversions"));
         }
 
-        // Each VaultAmm instance is unidirectional.
-        // Verify the input mint matches our expected direction.
-        if quote_params.input_mint != self.input_mint {
-            return Err(anyhow!(
-                "VaultAmm: expected input_mint {}, got {}",
-                self.input_mint,
-                quote_params.input_mint
-            ));
-        }
+        self.validate_mint_pair(&quote_params.input_mint, &quote_params.output_mint)?;
 
         let out_amount =
             compute_vault_output(&self.input_mint, &self.output_mint, quote_params.amount)
@@ -193,6 +187,8 @@ impl Amm for VaultAmm {
     }
 
     fn get_swap_and_account_metas(&self, swap_params: &SwapParams) -> Result<SwapAndAccountMetas> {
+        self.validate_mint_pair(&swap_params.source_mint, &swap_params.destination_mint)?;
+
         let account_metas = build_vault_account_metas(
             &swap_params.token_transfer_authority,
             &swap_params.source_token_account,
@@ -238,14 +234,28 @@ impl Amm for VaultAmm {
 }
 
 impl VaultAmm {
+    /// Every request must match this instance's complete directed conversion.
+    fn validate_mint_pair(&self, input: &Pubkey, output: &Pubkey) -> Result<()> {
+        if *input != self.input_mint || *output != self.output_mint {
+            return Err(anyhow!(
+                "VaultAmm: mint pair {} -> {} does not match conversion {} -> {}",
+                input,
+                output,
+                self.input_mint,
+                self.output_mint,
+            ));
+        }
+        Ok(())
+    }
+
     /// Create a VaultAmm directly with known values (for testing/examples).
     ///
     /// In production, use `from_keyed_account` or `known_instances()`.
     pub fn new_for_testing(input_mint: Pubkey, output_mint: Pubkey) -> Self {
         let key = derive_synthetic_key(&input_mint, &output_mint);
         let _label_suffix = format_label(&input_mint, &output_mint);
-        let output_vault =
-            vault_for_mint(&output_mint).expect("testing constructor requires a protocol mint");
+        let output_vault = conversion_output_vault(&input_mint, &output_mint)
+            .expect("testing constructor requires a supported conversion direction");
         Self {
             key,
             input_mint,
@@ -334,6 +344,18 @@ fn vault_for_mint(mint: &Pubkey) -> Option<Pubkey> {
     } else {
         None
     }
+}
+
+/// Resolve the output vault only for one of the four on-chain conversion edges.
+fn conversion_output_vault(input_mint: &Pubkey, output_mint: &Pubkey) -> Option<Pubkey> {
+    let into_profit =
+        (*input_mint == CRIME_MINT || *input_mint == FRAUD_MINT) && *output_mint == PROFIT_MINT;
+    let from_profit =
+        *input_mint == PROFIT_MINT && (*output_mint == CRIME_MINT || *output_mint == FRAUD_MINT);
+    let supported = into_profit || from_profit;
+    supported.then(|| {
+        vault_for_mint(output_mint).expect("supported conversion output is a protocol mint")
+    })
 }
 
 /// Derive a deterministic synthetic key for a vault conversion pair.
