@@ -4,10 +4,12 @@ use anyhow::{anyhow, Result};
 use solana_sdk::pubkey::Pubkey;
 use spl_token::solana_program::program_pack::Pack;
 use spl_token_2022::extension::{
+    default_account_state::DefaultAccountState,
+    pausable::PausableConfig,
     transfer_fee::{TransferFee, TransferFeeConfig},
     transfer_hook, BaseStateWithExtensions, ExtensionType, StateWithExtensions,
 };
-use spl_token_2022::state::Mint;
+use spl_token_2022::state::{AccountState, Mint};
 
 use crate::accounts::addresses::{SPL_TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID};
 
@@ -18,8 +20,9 @@ fn schedule_is_zero(schedule: &TransferFee) -> bool {
 /// Validate a quote mint used by nominal reserve/tax arithmetic.
 ///
 /// Classic SPL mints are accepted. Token-2022 mints must have zero current
-/// and scheduled transfer fees and must not have an armed transfer hook,
-/// because the Tax SPL lane does not forward quote-side hook accounts.
+/// and scheduled transfer fees, must be transferable, and must not have an
+/// armed transfer hook, because the Tax SPL lane does not forward quote-side
+/// hook accounts. Dynamic mint-level pause state is checked on every update.
 pub fn validate_quote_mint(data: &[u8], owner: &Pubkey, expected_program: &Pubkey) -> Result<()> {
     if owner != expected_program {
         return Err(anyhow!(
@@ -59,6 +62,27 @@ pub fn validate_quote_mint(data: &[u8], owner: &Pubkey, expected_program: &Pubke
             "quote mint has an armed transfer hook unsupported by the Tax SPL lane"
         ));
     }
+    if extensions.contains(&ExtensionType::NonTransferable) {
+        return Err(anyhow!("quote mint is non-transferable"));
+    }
+    if extensions.contains(&ExtensionType::DefaultAccountState) {
+        let default_state = mint
+            .get_extension::<DefaultAccountState>()
+            .map_err(|e| anyhow!("invalid default-account-state configuration: {e}"))?;
+        if default_state.state != AccountState::Initialized as u8 {
+            return Err(anyhow!(
+                "quote mint does not initialize new token accounts as transferable"
+            ));
+        }
+    }
+    if extensions.contains(&ExtensionType::Pausable) {
+        let pausable = mint
+            .get_extension::<PausableConfig>()
+            .map_err(|e| anyhow!("invalid pausable configuration: {e}"))?;
+        if bool::from(pausable.paused) {
+            return Err(anyhow!("quote mint is paused"));
+        }
+    }
     Ok(())
 }
 
@@ -66,7 +90,8 @@ pub fn validate_quote_mint(data: &[u8], owner: &Pubkey, expected_program: &Pubke
 mod tests {
     use super::*;
     use spl_token_2022::extension::{
-        transfer_hook::TransferHook, BaseStateWithExtensionsMut, StateWithExtensionsMut,
+        non_transferable::NonTransferable, transfer_hook::TransferHook, BaseStateWithExtensionsMut,
+        StateWithExtensionsMut,
     };
 
     fn transfer_fee(bps: u16, maximum_fee: u64, epoch: u64) -> TransferFee {
@@ -104,6 +129,50 @@ mod tests {
         if include_hook_extension {
             let hook = state.init_extension::<TransferHook>(true).unwrap();
             hook.program_id = hook_program.try_into().unwrap();
+        }
+
+        state.base = Mint {
+            mint_authority: solana_sdk::program_option::COption::None,
+            supply: 1,
+            decimals: 6,
+            is_initialized: true,
+            freeze_authority: solana_sdk::program_option::COption::None,
+        };
+        state.pack_base();
+        state.init_account_type().unwrap();
+        data
+    }
+
+    fn token_2022_transfer_gate_mint(
+        default_state: Option<AccountState>,
+        paused: Option<bool>,
+        non_transferable: bool,
+    ) -> Vec<u8> {
+        let mut extensions = Vec::new();
+        if default_state.is_some() {
+            extensions.push(ExtensionType::DefaultAccountState);
+        }
+        if paused.is_some() {
+            extensions.push(ExtensionType::Pausable);
+        }
+        if non_transferable {
+            extensions.push(ExtensionType::NonTransferable);
+        }
+        let len = ExtensionType::try_calculate_account_len::<Mint>(&extensions).unwrap();
+        let mut data = vec![0u8; len];
+        let mut state = StateWithExtensionsMut::<Mint>::unpack_uninitialized(&mut data).unwrap();
+
+        if let Some(account_state) = default_state {
+            state
+                .init_extension::<DefaultAccountState>(true)
+                .unwrap()
+                .state = account_state as u8;
+        }
+        if let Some(is_paused) = paused {
+            state.init_extension::<PausableConfig>(true).unwrap().paused = is_paused.into();
+        }
+        if non_transferable {
+            state.init_extension::<NonTransferable>(true).unwrap();
         }
 
         state.base = Mint {
@@ -179,5 +248,37 @@ mod tests {
                 .to_string()
                 .contains("armed transfer hook")
         );
+    }
+
+    #[test]
+    fn transferable_profiles_accept_initialized_and_unpaused_mints() {
+        let data =
+            token_2022_transfer_gate_mint(Some(AccountState::Initialized), Some(false), false);
+        validate_quote_mint(&data, &TOKEN_2022_PROGRAM_ID, &TOKEN_2022_PROGRAM_ID).unwrap();
+    }
+
+    #[test]
+    fn blocked_transfer_profiles_are_rejected() {
+        for (data, expected) in [
+            (
+                token_2022_transfer_gate_mint(Some(AccountState::Frozen), None, false),
+                "does not initialize new token accounts as transferable",
+            ),
+            (
+                token_2022_transfer_gate_mint(None, Some(true), false),
+                "quote mint is paused",
+            ),
+            (
+                token_2022_transfer_gate_mint(None, None, true),
+                "quote mint is non-transferable",
+            ),
+        ] {
+            assert!(
+                validate_quote_mint(&data, &TOKEN_2022_PROGRAM_ID, &TOKEN_2022_PROGRAM_ID)
+                    .unwrap_err()
+                    .to_string()
+                    .contains(expected)
+            );
+        }
     }
 }

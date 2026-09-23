@@ -13,7 +13,7 @@ and package verification on every push and pull request.
 
 | Suite | Tests | What it proves |
 |---|---|---|
-| Unit tests (`src/`) | 142 | Quote/tax/vault math, exact state parsing, dynamic PoolState discovery, instruction discriminator goldens, SOL/SPL account builders in both orientations, quote-mint policy, pause boundaries, stale-state deactivation, factory functions, and vault balance capping |
+| Unit tests (`src/`) | 144 | Quote/tax/vault math, exact state parsing, dynamic PoolState discovery, instruction discriminator goldens, SOL/SPL account builders in both orientations, quote-mint transfer policy, pause boundaries, stale-state deactivation, factory functions, and vault balance capping |
 | `tests/pool_discovery_properties.rs` | 2 | Arbitrary AMM-owned bytes never panic; every canonical faction-pool shape is discoverable for classic SPL Token and Token-2022 quotes |
 | `tests/test_construction.rs` | 18 | Full Jupiter lifecycle: `from_keyed_account` → `update` → `quote` with mock account data, error cases |
 | `tests/test_edge_gauntlet.rs` | 29 | Boundary amounts, extreme tax rates, dust, overflow guards |

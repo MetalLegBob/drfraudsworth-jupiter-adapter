@@ -107,7 +107,16 @@ SOL pool swaps have two fee components:
 
 SPL quote mints may use classic SPL Token or Token-2022. Token-2022 quotes are
 accepted only when current and scheduled transfer fees are zero and the quote
-transfer hook is unarmed, preserving nominal reserve and tax arithmetic.
+transfer hook is unarmed, preserving nominal reserve and tax arithmetic. A
+non-transferable mint, frozen default account state, or active mint-level pause
+also disables quoting. The mint is refreshed with the pool, so these gates fail
+closed if an issuer changes live state.
+
+As of 2026-09-23, the same policy accepts the mainnet mint accounts for all
+currently registered quote families: classic SPL HYPE, ZEC, META, SOLO, CRED
+and USDC, plus Token-2022 NVDAx, TSLAx, SNDK and PAXG. This is compatibility
+evidence, not a mint allowlist; future quote assets are evaluated from their
+live mint account.
 
 Tax rates change every epoch (roughly 20 minutes). Jupiter's `update()` method refreshes EpochState to get current rates. Stale rates between quote and execution are handled by on-chain slippage protection (`minimum_output`).
 
@@ -292,7 +301,7 @@ the original SOL pools, all four live SPL pilot pools in both directions and
 orientations, exact snapshot quotes, and account-list construction. The pilot
 addresses are fixtures only; production discovery remains PoolState-driven.
 
-The standalone suite currently contains 246 deterministic tests. Cross-crate
+The standalone suite currently contains 248 deterministic tests. Cross-crate
 proofs live in the protocol repository because they compile against the real
 Anchor programs: 37 zero-tolerance quote-math parity tests, direct adapter-to-
 Anchor SPL ABI parity across both factions, orientations, and quote-token

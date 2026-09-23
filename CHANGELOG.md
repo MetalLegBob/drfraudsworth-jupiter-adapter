@@ -24,6 +24,8 @@ All notable changes to this crate are recorded here.
 - Reject unsupported or mismatched directed conversion-vault mint pairs during
   construction, quoting and account-meta generation. Cross-faction routing is
   unchanged: CRIME/FRAUD routes compose through PROFIT as two valid vault legs.
+- Fail closed for non-transferable, default-frozen or currently paused
+  Token-2022 quote mints.
 
 ## [0.1.5] - 2026-07-18
 
