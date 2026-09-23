@@ -45,13 +45,20 @@ impl TaxSwapLane {
         }
     }
 
-    /// Encode Anchor's discriminator followed by its two little-endian u64
-    /// arguments: `amount_in` and `minimum_output`.
-    pub fn encode(self, amount_in: u64, minimum_output: u64) -> [u8; 24] {
-        let mut data = [0u8; 24];
-        data[..8].copy_from_slice(&self.discriminator());
-        data[8..16].copy_from_slice(&amount_in.to_le_bytes());
-        data[16..24].copy_from_slice(&minimum_output.to_le_bytes());
+    /// Encode the selected Anchor Tax instruction. SOL lanes include the
+    /// `is_crime` argument; SPL lanes derive faction identity from PoolState.
+    pub fn encode(self, amount_in: u64, minimum_output: u64, is_crime: bool) -> Vec<u8> {
+        let mut data = Vec::with_capacity(if matches!(self, Self::SolBuy | Self::SolSell) {
+            25
+        } else {
+            24
+        });
+        data.extend_from_slice(&self.discriminator());
+        data.extend_from_slice(&amount_in.to_le_bytes());
+        data.extend_from_slice(&minimum_output.to_le_bytes());
+        if matches!(self, Self::SolBuy | Self::SolSell) {
+            data.push(u8::from(is_crime));
+        }
         data
     }
 }
@@ -98,11 +105,22 @@ mod tests {
         let amount_in = 0x0102_0304_0506_0708;
         let minimum_output = 0x1112_1314_1516_1718;
         for (lane, _, discriminator) in VECTORS {
-            let encoded = lane.encode(amount_in, minimum_output);
+            let encoded = lane.encode(amount_in, minimum_output, true);
             assert_eq!(&encoded[..8], &discriminator);
             assert_eq!(&encoded[8..16], &amount_in.to_le_bytes());
             assert_eq!(&encoded[16..24], &minimum_output.to_le_bytes());
+            if matches!(lane, TaxSwapLane::SolBuy | TaxSwapLane::SolSell) {
+                assert_eq!(&encoded[24..], &[1]);
+            } else {
+                assert_eq!(encoded.len(), 24);
+            }
         }
+    }
+
+    #[test]
+    fn sol_lane_encodes_faction_boolean() {
+        assert_eq!(TaxSwapLane::SolBuy.encode(1, 2, true)[24], 1);
+        assert_eq!(TaxSwapLane::SolSell.encode(1, 2, false)[24], 0);
     }
 
     #[test]
