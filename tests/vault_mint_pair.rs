@@ -85,3 +85,33 @@ fn account_builder_rejects_wrong_destination_mint() {
 
     assert!(result.is_err());
 }
+
+#[test]
+fn cross_faction_routes_compose_through_profit() {
+    for (source_mint, destination_mint) in [(CRIME_MINT, FRAUD_MINT), (FRAUD_MINT, CRIME_MINT)] {
+        let into_profit = VaultAmm::new_for_testing(source_mint, PROFIT_MINT);
+        let first_leg = into_profit
+            .quote(&QuoteParams {
+                amount: 10_000,
+                input_mint: source_mint,
+                output_mint: PROFIT_MINT,
+                swap_mode: SwapMode::ExactIn,
+                fee_mode: FeeMode::Normal,
+            })
+            .unwrap();
+
+        let out_of_profit = VaultAmm::new_for_testing(PROFIT_MINT, destination_mint);
+        let second_leg = out_of_profit
+            .quote(&QuoteParams {
+                amount: first_leg.out_amount,
+                input_mint: PROFIT_MINT,
+                output_mint: destination_mint,
+                swap_mode: SwapMode::ExactIn,
+                fee_mode: FeeMode::Normal,
+            })
+            .unwrap();
+
+        assert_eq!(first_leg.out_amount, 100);
+        assert_eq!(second_leg.out_amount, 10_000);
+    }
+}

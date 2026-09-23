@@ -34,7 +34,9 @@ live SOL or SPL quote pool without another static allowlist entry.
 
 - The 2 SOL pool instances are **bidirectional** (buy and sell), covering 4 swap directions.
 - The 4 vault instances are **unidirectional**, one per conversion direction.
-- **CRIME <-> FRAUD direct conversion is not supported on-chain.** Jupiter routes this via multi-hop (CRIME -> PROFIT -> FRAUD).
+- **CRIME <-> FRAUD is an intentional two-leg route through PROFIT.** The vault
+  exposes no single direct instruction; Jupiter composes CRIME -> PROFIT ->
+  FRAUD, or the reverse, from two valid unidirectional instances.
 
 ## Pool Discovery
 
@@ -287,7 +289,7 @@ See [TESTING.md](./TESTING.md) for the full suite breakdown. CI runs the suite p
 
 The mainnet-data validation suite parses real (hex-embedded) mainnet account snapshots and includes an equivalence proof that account lists built from parsed on-chain data are byte-identical to the constant-based builders.
 
-The standalone suite currently contains 244 deterministic tests. Cross-crate
+The standalone suite currently contains 245 deterministic tests. Cross-crate
 proofs live in the protocol repository because they compile against the real
 Anchor programs: 37 zero-tolerance quote-math parity tests, direct adapter-to-
 Anchor SPL ABI parity across both factions, orientations, and quote-token

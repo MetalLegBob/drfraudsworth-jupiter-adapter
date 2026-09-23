@@ -20,7 +20,7 @@ and package verification on every push and pull request.
 | `tests/test_instruction_structure.rs` | 15 | Exact account ordering, writability, and signer flags for every instruction |
 | `tests/test_mainnet_validation.rs` | 15 | Real mainnet account data (hex-embedded, no RPC): parsing, quoting with live reserves, discriminator match, pause fields, and byte-identical generic/constant SOL account building |
 | `tests/test_quoting_extended.rs` | 20 | Quoting properties: monotonicity, parity with reference values, speed |
-| `tests/vault_mint_pair.rs` | 3 | Only the four on-chain conversion edges construct; quote and account building reject a mismatched destination |
+| `tests/vault_mint_pair.rs` | 4 | Only the four on-chain conversion edges construct; mismatched legs fail while CRIME/FRAUD routes compose through PROFIT |
 
 Mainnet snapshots are hex-embedded at fixed fetch dates (see comments in
 `test_mainnet_validation.rs`), keeping the suite deterministic and offline —

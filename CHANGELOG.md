@@ -20,7 +20,8 @@ All notable changes to this crate are recorded here.
 ### Fixed
 
 - Reject unsupported or mismatched directed conversion-vault mint pairs during
-  construction, quoting and account-meta generation.
+  construction, quoting and account-meta generation. Cross-faction routing is
+  unchanged: CRIME/FRAUD routes compose through PROFIT as two valid vault legs.
 
 ## [0.1.5] - 2026-07-18
 
