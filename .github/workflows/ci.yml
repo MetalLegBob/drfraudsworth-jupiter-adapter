@@ -11,10 +11,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
+      - name: Format
+        run: cargo fmt --check
       - name: Test
-        run: cargo test --all-targets
+        run: cargo test --all-targets --locked
       - name: Clippy
-        run: cargo clippy --all-targets -- -D warnings
-      - name: Build examples
-        run: cargo build --examples
+        run: cargo clippy --all-targets --locked -- -D warnings
+      - name: Documentation
+        env:
+          RUSTDOCFLAGS: -D warnings
+        run: cargo doc --no-deps --locked
+      - name: Package
+        run: cargo package --locked

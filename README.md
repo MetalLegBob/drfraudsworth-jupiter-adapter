@@ -4,7 +4,10 @@
 
 Jupiter AMM adapter for the Dr. Fraudsworth DEX protocol on Solana. Implements the `jupiter-amm-interface::Amm` trait so Jupiter's routing engine can route swaps through Dr. Fraudsworth's on-chain programs.
 
-This repository contains the standalone adapter crate. The on-chain programs, Anchor IDLs, and the math-parity test suite (SDK quotes proven equal to on-chain outputs) live in the protocol repository: [github.com/MetalLegBob/drfraudsworth](https://github.com/MetalLegBob/drfraudsworth).
+This repository contains the standalone adapter crate and reviewed IDL copies.
+The canonical on-chain programs and math-parity suite (SDK quotes proven equal
+to on-chain outputs) live in the protocol repository:
+[github.com/MetalLegBob/drfraudsworth](https://github.com/MetalLegBob/drfraudsworth).
 
 **Key properties:**
 
@@ -16,9 +19,9 @@ This repository contains the standalone adapter crate. The on-chain programs, An
 
 ## Pool Types
 
-The bootstrap catalog exposes the six existing instances below. AMM-owned
-`PoolState` discovery adds new SOL or SPL quote pools without another static
-allowlist entry.
+The optional bootstrap catalog exposes the two original SOL pool keys and four
+synthetic vault directions below. AMM-owned `PoolState` discovery covers every
+live SOL or SPL quote pool without another static allowlist entry.
 
 | # | Instance | Type | Key Source | Reserves | Fees |
 |---|----------|------|------------|----------|------|
@@ -47,13 +50,13 @@ let sol_keys: Vec<Pubkey> = known_sol_pool_keys();
 // Vault instances: returns 4 pre-built (Pubkey, VaultAmm) pairs
 let vault_instances: Vec<(Pubkey, VaultAmm)> = known_instances();
 
-// All 6 pool keys in one call
+// All 6 bootstrap keys in one call
 let all_keys: Vec<Pubkey> = all_pool_keys();
 ```
 
 - `known_sol_pool_keys()` -- Returns 2 SOL pool PDAs. Jupiter fetches account data and calls `SolPoolAmm::from_keyed_account()`.
 - `known_instances()` -- Returns 4 pre-constructed `VaultAmm` instances (fixed-pool protocol, no `getProgramAccounts` needed).
-- `all_pool_keys()` -- Convenience: all 6 instance keys combined.
+- `all_pool_keys()` -- Convenience: all 6 bootstrap keys combined.
 
 ### Automatic PoolState discovery
 
@@ -76,6 +79,18 @@ data size. Pool accounts are **owned and discovered under the AMM program**;
 swap entry point that CPI-calls the AMM. This discovery/execution split is
 covered by unit tests.
 
+Current live `PoolState` references are listed here for integration testing,
+not runtime admission:
+
+| Pair | Pool |
+|---|---|
+| CRIME/SOL | `ZWUZ3PzGk6bg6g3BS3WdXKbdAecUgZxnruKXQkte7wf` |
+| FRAUD/SOL | `AngvViTVGd2zxP8KoFUjGU3TyrQjqeM1idRWiKM8p3mq` |
+| CRIME/USDC | `HyJReAfMzABjEgZQNLrkdSR4pD5P78G5ucEXWRoVDNUa` |
+| FRAUD/USDC | `ETtBco8RUWNaNE9YozMg2KrpbJN7oqCjdd94QgwsAgzB` |
+| CRIME/HYPE | `HummhRt6eZLVDRT3NNCRgTs3Mouje4EypQvQbXKD5Mvy` |
+| FRAUD/HYPE | `2EVKU8ZmuZRXc6baRUHZVUjry1AaBJ9mwDgUJDZxrDGz` |
+
 ## Fee Structure
 
 ### Faction Pools
@@ -83,7 +98,7 @@ covered by unit tests.
 SOL pool swaps have two fee components:
 
 1. **LP fee:** 1% (100 BPS), fixed, deducted from swap amount
-2. **Dynamic tax:** 1-4% (cheap side) or 11-14% (expensive side), VRF-randomized each epoch (~30 min). Tax is split across staking rewards (71%), Carnage Fund (24%), and treasury (5%)
+2. **Dynamic tax:** 1-4% (cheap side) or 11-14% (expensive side), VRF-randomized each epoch (roughly 20 minutes). Tax is split across staking rewards (71%), Carnage Fund (24%), and treasury (5%)
 
 **Buy (quote -> faction):** Tax deducted from quote input before the AMM swap.
 **Sell (faction -> quote):** Tax deducted from quote output after the AMM swap.
@@ -92,7 +107,7 @@ SPL quote mints may use classic SPL Token or Token-2022. Token-2022 quotes are
 accepted only when current and scheduled transfer fees are zero and the quote
 transfer hook is unarmed, preserving nominal reserve and tax arithmetic.
 
-Tax rates change every epoch (~30 minutes). Jupiter's `update()` method refreshes EpochState to get current rates. Stale rates between quote and execution are handled by on-chain slippage protection (`minimum_output`).
+Tax rates change every epoch (roughly 20 minutes). Jupiter's `update()` method refreshes EpochState to get current rates. Stale rates between quote and execution are handled by on-chain slippage protection (`minimum_output`).
 
 ### Vault Conversions
 
@@ -102,7 +117,7 @@ Tax rates change every epoch (~30 minutes). Jupiter's `update()` method refreshe
 
 ## Epoch Dynamics
 
-Each epoch (~30 minutes), VRF randomness determines:
+Each epoch (roughly 20 minutes), VRF randomness determines:
 
 1. **Which faction is cheap** — 75% chance of flipping each epoch
 2. **Exact tax magnitudes** — independently randomized per token from discrete sets
@@ -196,9 +211,11 @@ cargo run --example quote_example
 
 ## Interface Version
 
-The adapter uses stable `jupiter-amm-interface` 0.6.1, including `FeeMode` and
-the `user`/`payer` swap fields. The dependency is an exact crates.io pin and
-the committed lockfile preserves the verified Solana 2.x dependency graph.
+This source tree pins published `jupiter-amm-interface` 0.6.1, including
+`FeeMode` and the `user`/`payer` swap fields. The dependency is exact and the
+committed lockfile preserves the verified Solana 2.x dependency graph. The
+pin does not define Jupiter's final router variant; that remains part of the
+Jupiter-side integration.
 
 ## Program IDs
 
@@ -242,7 +259,7 @@ Full address set is in `deployments/mainnet.json` in the protocol repository. Ke
 
 ## Jupiter Integration Notes
 
-- **Swap variant:** Stable interface 0.6.1 has no protocol-specific variant, so the adapter returns `Swap::TokenSwap` as the integration placeholder. Jupiter's encoder must map direction and quote type to `swap_sol_buy`, `swap_sol_sell`, `swap_spl_buy`, or `swap_spl_sell`. `instruction::TaxSwapLane` exports the reviewed lane selection, Anchor discriminators, and 24-byte argument encoding; golden tests derive every discriminator from its Anchor preimage.
+- **Swap variant:** Published interface 0.6.1 has no protocol-specific or generic pre-integration variant. The current `Swap::TokenSwap` return is a review placeholder only and must not be interpreted as a production SPL Token Swap route. Jupiter's final integration must allocate the real variant/processor and map direction and quote type to `swap_sol_buy`, `swap_sol_sell`, `swap_spl_buy`, or `swap_spl_sell`. `instruction::TaxSwapLane` exports the reviewed lane selection, Anchor discriminators, and 24-byte argument encoding; golden tests derive every discriminator from its Anchor preimage.
 - **Vault instance keying:** Synthetic PDAs derived from `[b"jup_vault", input_mint, output_mint]` via `Pubkey::find_program_address`. These are not real on-chain accounts -- they exist solely to give each VaultAmm instance a unique key.
 - **`supports_exact_out`:** Returns `false` for all instances. Integer division in vault conversions loses information, and SOL pool exact-out would require iterative solving.
 - **No network calls:** All methods (`quote`, `get_swap_and_account_metas`, `get_accounts_to_update`) operate on Jupiter-provided account snapshots and constants. Jupiter handles account fetching externally.
@@ -270,7 +287,7 @@ See [TESTING.md](./TESTING.md) for the full suite breakdown. CI runs the suite p
 
 The mainnet-data validation suite parses real (hex-embedded) mainnet account snapshots and includes an equivalence proof that account lists built from parsed on-chain data are byte-identical to the constant-based builders.
 
-The standalone suite currently contains 241 deterministic tests. Cross-crate
+The standalone suite currently contains 244 deterministic tests. Cross-crate
 proofs live in the protocol repository because they compile against the real
 Anchor programs: 37 zero-tolerance quote-math parity tests, direct adapter-to-
 Anchor SPL ABI parity across both factions, orientations, and quote-token

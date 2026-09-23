@@ -6,7 +6,8 @@ Run everything in this repository with:
 cargo test --locked
 ```
 
-CI runs the full suite plus `cargo clippy -- -D warnings` on every push and pull request.
+CI runs locked tests, clippy with warnings denied, formatting, documentation,
+and package verification on every push and pull request.
 
 ## Suites in this repository (v0.2.0)
 
@@ -19,6 +20,7 @@ CI runs the full suite plus `cargo clippy -- -D warnings` on every push and pull
 | `tests/test_instruction_structure.rs` | 15 | Exact account ordering, writability, and signer flags for every instruction |
 | `tests/test_mainnet_validation.rs` | 15 | Real mainnet account data (hex-embedded, no RPC): parsing, quoting with live reserves, discriminator match, pause fields, and byte-identical generic/constant SOL account building |
 | `tests/test_quoting_extended.rs` | 20 | Quoting properties: monotonicity, parity with reference values, speed |
+| `tests/vault_mint_pair.rs` | 3 | Only the four on-chain conversion edges construct; quote and account building reject a mismatched destination |
 
 Mainnet snapshots are hex-embedded at fixed fetch dates (see comments in
 `test_mainnet_validation.rs`), keeping the suite deterministic and offline —
