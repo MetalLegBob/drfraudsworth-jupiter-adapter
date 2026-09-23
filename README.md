@@ -4,14 +4,17 @@
 
 Jupiter AMM adapter for the Dr. Fraudsworth DEX protocol on Solana. Implements the `jupiter-amm-interface::Amm` trait so Jupiter's routing engine can route swaps through Dr. Fraudsworth's on-chain programs.
 
-This repository contains the standalone adapter crate and reviewed IDL copies.
-The canonical on-chain programs and math-parity suite (SDK quotes proven equal
-to on-chain outputs) live in the protocol repository:
-[github.com/MetalLegBob/drfraudsworth](https://github.com/MetalLegBob/drfraudsworth).
+This repository contains the standalone adapter crate and the six mainnet IDLs
+from the reviewed protocol release manifest. Historical protocol source and
+internal audit artifacts are available in the
+[protocol repository](https://github.com/MetalLegBob/drfraudsworth); see
+[`SECURITY.md`](./SECURITY.md) for the current provenance and audit disclosure.
 
 **Key properties:**
 
-- Exact quote accuracy — the SDK's math modules are copies of the on-chain math, proven equal by zero-tolerance parity tests in the protocol repository, and validated here against embedded mainnet account data
+- Deterministic quote accuracy — the SDK math is validated against golden vectors
+  and embedded mainnet account snapshots; native quote-to-output parity remains
+  a separate Jupiter integration gate
 - Zero network calls in any method (pool state is parsed from Jupiter-provided account snapshots; all protocol-singleton addresses are hardcoded)
 - Supports the existing SOL pools, all four vault conversions, and generic SPL-quoted faction pools
 - Generic pool construction: `FactionPoolAmm` (the neutral alias for `SolPoolAmm`) derives mints, vaults, token programs, reserves, lifecycle flags, and orientation from AMM-owned `PoolState` data
@@ -250,7 +253,9 @@ Jupiter needs to know which programs are called for each swap type:
 
 ## IDLs
 
-Anchor IDLs for all six programs are included in this repository under [`idl/`](./idl/). Each IDL embeds its mainnet program address; these are the same IDLs the production frontend runs against.
+Anchor IDLs for all six programs are included under [`idl/`](./idl/). They are
+byte-identical to the IDL artifacts recorded in the reviewed mainnet release
+manifest and embed the mainnet program addresses.
 
 ## Token Mints
 
@@ -308,11 +313,11 @@ the original SOL pools, all four live SPL pilot pools in both directions and
 orientations, exact snapshot quotes, and account-list construction. The pilot
 addresses are fixtures only; production discovery remains PoolState-driven.
 
-The standalone suite currently contains 248 deterministic tests. Cross-crate
-proofs live in the protocol repository because they compile against the real
-Anchor programs: 37 zero-tolerance quote-math parity tests, direct adapter-to-
-Anchor SPL ABI parity across both factions, orientations, and quote-token
-programs, plus 64 real-SBF Tax -> AMM SPL CPI tests.
+The standalone suite currently contains 250 deterministic tests. These tests
+cover adapter parsing, quoting, discovery, account metas and instruction
+layouts; they do not by themselves claim native execution parity. The pending
+Jupiter integration must also commit its LiteSVM test-kit fixtures and prove
+that each quoted output equals the executed destination-account delta.
 
 ## License
 

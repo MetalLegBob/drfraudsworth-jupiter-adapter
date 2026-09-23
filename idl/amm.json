@@ -8,6 +8,191 @@
   },
   "instructions": [
     {
+      "name": "add_liquidity_double_sided",
+      "docs": [
+        "Add faction-side-exact protocol liquidity from an approved ArbConfig wallet."
+      ],
+      "discriminator": [
+        186,
+        123,
+        220,
+        169,
+        188,
+        244,
+        76,
+        238
+      ],
+      "accounts": [
+        {
+          "name": "wallet",
+          "docs": [
+            "Transaction-level signer; handler requires ArbConfig wallet A or B."
+          ],
+          "signer": true
+        },
+        {
+          "name": "arb_config",
+          "docs": [
+            "Epoch Program's canonical ArbConfig PDA.",
+            "(GAP-1 idiom, spec §14.2)."
+          ],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  114,
+                  98,
+                  95,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                48,
+                215,
+                35,
+                39,
+                92,
+                255,
+                252,
+                177,
+                255,
+                59,
+                215,
+                14,
+                138,
+                15,
+                252,
+                42,
+                224,
+                251,
+                124,
+                63,
+                231,
+                83,
+                226,
+                150,
+                188,
+                103,
+                242,
+                205,
+                48,
+                27,
+                224,
+                209
+              ]
+            }
+          }
+        },
+        {
+          "name": "pool",
+          "docs": [
+            "Pool state PDA. Mutable for reserve increments and the re-entrancy",
+            "guard. Seeds validate this is the canonical pool for its mint pair;",
+            "the `!pool.locked` constraint is the same uniform guard the swap",
+            "lanes enforce."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  111,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool.mint_a",
+                "account": "PoolState"
+              },
+              {
+                "kind": "account",
+                "path": "pool.mint_b",
+                "account": "PoolState"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault_a",
+          "docs": [
+            "Vault A: PDA-owned token account holding reserve A.",
+            "Validated against pool state to prevent vault substitution."
+          ],
+          "writable": true
+        },
+        {
+          "name": "vault_b",
+          "docs": [
+            "Vault B: PDA-owned token account holding reserve B."
+          ],
+          "writable": true
+        },
+        {
+          "name": "mint_a",
+          "docs": [
+            "Mint A: decimals for transfer_checked + orientation cross-check."
+          ]
+        },
+        {
+          "name": "mint_b",
+          "docs": [
+            "Mint B: decimals for transfer_checked + orientation cross-check."
+          ]
+        },
+        {
+          "name": "caller_faction",
+          "docs": [
+            "Approved wallet's faction account -- source of the exact faction side."
+          ],
+          "writable": true
+        },
+        {
+          "name": "caller_quote",
+          "docs": [
+            "Approved wallet's quote account -- source of the computed quote side."
+          ],
+          "writable": true
+        },
+        {
+          "name": "token_program_a",
+          "docs": [
+            "Token program for mint A (classic SPL or Token-2022).",
+            "Validated against pool state to prevent program substitution."
+          ]
+        },
+        {
+          "name": "token_program_b",
+          "docs": [
+            "Token program for mint B (classic SPL or Token-2022)."
+          ]
+        }
+      ],
+      "args": [
+        {
+          "name": "faction_amount",
+          "type": "u64"
+        },
+        {
+          "name": "max_quote",
+          "type": "u64"
+        }
+      ]
+    },
+    {
       "name": "burn_admin",
       "docs": [
         "Burns the admin key, permanently preventing new pool creation.",
@@ -361,6 +546,292 @@
       ]
     },
     {
+      "name": "remove_liquidity_double_sided",
+      "docs": [
+        "Remove an approved percentage of both reserves to allowlisted ATAs."
+      ],
+      "discriminator": [
+        96,
+        96,
+        3,
+        20,
+        211,
+        226,
+        233,
+        138
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "docs": [
+            "Squads vault PDA signer and rent payer for missing destination ATAs."
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "arb_config",
+          "docs": [
+            "Epoch Program's canonical ArbConfig PDA.",
+            "(GAP-1 idiom, spec §14.2)."
+          ],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  114,
+                  98,
+                  95,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                48,
+                215,
+                35,
+                39,
+                92,
+                255,
+                252,
+                177,
+                255,
+                59,
+                215,
+                14,
+                138,
+                15,
+                252,
+                42,
+                224,
+                251,
+                124,
+                63,
+                231,
+                83,
+                226,
+                150,
+                188,
+                103,
+                242,
+                205,
+                48,
+                27,
+                224,
+                209
+              ]
+            }
+          }
+        },
+        {
+          "name": "pool",
+          "docs": [
+            "Pool state PDA, mutable for reserve decrements and the lock."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  111,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool.mint_a",
+                "account": "PoolState"
+              },
+              {
+                "kind": "account",
+                "path": "pool.mint_b",
+                "account": "PoolState"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault_a",
+          "writable": true
+        },
+        {
+          "name": "vault_b",
+          "writable": true
+        },
+        {
+          "name": "mint_a"
+        },
+        {
+          "name": "mint_b"
+        },
+        {
+          "name": "destination_owner",
+          "docs": [
+            "Destination owner; validity comes ONLY from the handler allowlist",
+            "(spec §14.8 entry 1)."
+          ]
+        },
+        {
+          "name": "destination_a",
+          "docs": [
+            "Canonical ATA for destination owner and mint A.",
+            "",
+            "Rent-grief design note: Anchor evaluates `init_if_needed` before the",
+            "handler allowlist. If that handler check fails, Solana rolls back the",
+            "entire transaction, including this ATA creation; rejection creates",
+            "nothing and spends no rent."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "destination_owner"
+              },
+              {
+                "kind": "account",
+                "path": "token_program_a"
+              },
+              {
+                "kind": "account",
+                "path": "mint_a"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "destination_b",
+          "docs": [
+            "Canonical ATA for destination owner and mint B. The same transaction",
+            "rollback guarantee applies if the allowlist rejects the owner."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "destination_owner"
+              },
+              {
+                "kind": "account",
+                "path": "token_program_b"
+              },
+              {
+                "kind": "account",
+                "path": "mint_b"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "token_program_a"
+        },
+        {
+          "name": "token_program_b"
+        },
+        {
+          "name": "associated_token_program",
+          "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "share_bps",
+          "type": "u16"
+        }
+      ]
+    },
+    {
       "name": "swap_sol_pool",
       "docs": [
         "Execute a swap in a SOL pool (CRIME/SOL or FRAUD/SOL).",
@@ -672,6 +1143,32 @@
       ]
     },
     {
+      "name": "LiquidityAddedEvent",
+      "discriminator": [
+        220,
+        104,
+        7,
+        39,
+        147,
+        1,
+        194,
+        142
+      ]
+    },
+    {
+      "name": "LiquidityRemoved",
+      "discriminator": [
+        225,
+        105,
+        216,
+        39,
+        124,
+        116,
+        169,
+        189
+      ]
+    },
+    {
       "name": "PoolInitializedEvent",
       "discriminator": [
         249,
@@ -793,6 +1290,46 @@
       "code": 6018,
       "name": "InvalidAuthority",
       "msg": "Invalid authority: cannot transfer to Pubkey::default()"
+    },
+    {
+      "code": 6019,
+      "name": "ExceedsMaxQuote",
+      "msg": "Computed quote side exceeds the max_quote budget bound"
+    },
+    {
+      "code": 6020,
+      "name": "ZeroLiquidity",
+      "msg": "Liquidity add would be one-sided"
+    },
+    {
+      "code": 6021,
+      "name": "NotFactionPool",
+      "msg": "Pool must contain exactly one faction mint"
+    },
+    {
+      "code": 6022,
+      "name": "InvalidArbConfig",
+      "msg": "Invalid ArbConfig account"
+    },
+    {
+      "code": 6023,
+      "name": "InvalidShare",
+      "msg": "Invalid share: share_bps must be within [1, 9999]"
+    },
+    {
+      "code": 6024,
+      "name": "DustFloorBreached",
+      "msg": "Liquidity removal would breach the 1,000-unit reserve dust floor"
+    },
+    {
+      "code": 6025,
+      "name": "InvalidDestination",
+      "msg": "Destination owner is not allowlisted in ArbConfig"
+    },
+    {
+      "code": 6026,
+      "name": "UnsupportedTransferFee",
+      "msg": "Current or scheduled Token-2022 transfer fees are unsupported"
     }
   ],
   "types": [
@@ -851,6 +1388,105 @@
               "PDA bump seed for re-derivation in downstream instructions."
             ],
             "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "LiquidityAddedEvent",
+      "docs": [
+        "Emitted when an approved ArbConfig wallet adds double-sided liquidity."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "pool",
+            "docs": [
+              "The pool PDA address."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "quote_amount",
+            "docs": [
+              "Quote tokens deposited (computed from the live oriented reserves)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "faction_amount",
+            "docs": [
+              "Faction tokens deposited (caller-passed exact side)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "reserve_a",
+            "docs": [
+              "Post-deposit reserve of token A."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "reserve_b",
+            "docs": [
+              "Post-deposit reserve of token B."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "slot",
+            "docs": [
+              "Slot from Clock sysvar."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "timestamp",
+            "docs": [
+              "Unix timestamp from Clock sysvar."
+            ],
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "LiquidityRemoved",
+      "docs": [
+        "Emitted when Squads removes a percentage of both live pool reserves."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "pool",
+            "docs": [
+              "The pool PDA address."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "amount_a",
+            "docs": [
+              "Tokens paid from reserve A."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "amount_b",
+            "docs": [
+              "Tokens paid from reserve B."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "destination",
+            "docs": [
+              "Allowlisted owner of both canonical destination ATAs."
+            ],
+            "type": "pubkey"
           }
         ]
       }

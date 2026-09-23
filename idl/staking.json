@@ -423,14 +423,16 @@
         {
           "name": "profit_mint",
           "docs": [
-            "PROFIT token mint (Token-2022)."
-          ]
+            "Canonical cluster-specific PROFIT token mint (Token-2022, 6 decimals)."
+          ],
+          "address": "pRoFiTj36haRD5sG2Neqib9KoSrtdYMGrM7SEkZetfR"
         },
         {
           "name": "token_program",
           "docs": [
             "Token-2022 program for PROFIT transfers."
-          ]
+          ],
+          "address": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
         },
         {
           "name": "program",
@@ -1056,6 +1058,21 @@
       "code": 6011,
       "name": "CooldownActive",
       "msg": "Cooldown active: must wait 12 hours after claiming before unstaking"
+    },
+    {
+      "code": 6012,
+      "name": "InvalidProfitMint",
+      "msg": "Mint is not the canonical PROFIT mint for this cluster"
+    },
+    {
+      "code": 6013,
+      "name": "InvalidTokenProgram",
+      "msg": "PROFIT requires the Token-2022 program"
+    },
+    {
+      "code": 6014,
+      "name": "InvalidProfitDecimals",
+      "msg": "Canonical PROFIT mint must have six decimals"
     }
   ],
   "types": [

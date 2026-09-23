@@ -13,12 +13,16 @@ All notable changes to this crate are recorded here.
 - Exact and delta-mode Conversion Vault `convert_v2` encoding helpers.
 - Deterministic coverage of all four live SPL pilot PoolStates in both swap
   directions and both pool orientations.
+- Six mainnet IDLs synchronized byte-for-byte with the reviewed protocol
+  release manifest.
 
 ### Changed
 
 - Updated `jupiter-amm-interface` from 0.6.0 to 0.6.1.
 - Renamed public descriptions from SOL-specific to quote-neutral terminology;
   `SolPoolAmm` remains the compatibility type name.
+- Clarified the public protocol-source, release-provenance and independent-audit
+  status without overstating the available security evidence.
 
 ### Fixed
 

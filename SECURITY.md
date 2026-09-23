@@ -18,10 +18,13 @@ Security fixes are applied to the latest published crate and the current
 
 ## Scope and audit status
 
-This repository contains an off-chain Jupiter adapter. The on-chain programs
-and their security evidence live in the
-[protocol repository](https://github.com/MetalLegBob/drfraudsworth).
+This repository contains an off-chain Jupiter adapter. Historical on-chain
+source and internal audit artifacts are available in the
+[protocol repository](https://github.com/MetalLegBob/drfraudsworth). Its public
+`main` branch is not a source-to-binary attestation for the September 2026
+mainnet upgrades. The current reproducible-build and finalized-chain readback
+records can be supplied during integration review.
 
-The project publishes an internal audit summary and verified-build evidence.
-Those materials are not an independent third-party security audit and are not
-represented as one.
+The bundled IDLs are byte-identical to the reviewed mainnet release artifacts.
+Neither the internal audit material nor the build/readback evidence is an
+independent third-party security audit, and it is not represented as one.

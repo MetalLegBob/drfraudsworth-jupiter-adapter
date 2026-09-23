@@ -8,6 +8,198 @@
   },
   "instructions": [
     {
+      "name": "accept_arb_config_authority",
+      "docs": [
+        "Complete a two-step ArbConfig authority transfer.",
+        "",
+        "Only the nonzero pending key may accept. Its separation from every",
+        "current active role is re-checked at acceptance time, after which the",
+        "pending sentinel is cleared.",
+        "",
+        "Source: Centralized-Arb MVP Spec §14.6 entries 4, 5, and 6."
+      ],
+      "discriminator": [
+        219,
+        62,
+        144,
+        192,
+        123,
+        230,
+        167,
+        150
+      ],
+      "accounts": [
+        {
+          "name": "new_authority",
+          "docs": [
+            "Pending authority that must explicitly accept the transfer."
+          ],
+          "signer": true
+        },
+        {
+          "name": "arb_config",
+          "docs": [
+            "Global ArbConfig PDA."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  114,
+                  98,
+                  95,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "activate_epoch_safety",
+      "docs": [
+        "Explicitly activate the reserved-byte safety carve on an existing,",
+        "quiescent EpochState. This deterministic migration is permissionless,",
+        "one-way, and required before any post-upgrade transition operation."
+      ],
+      "discriminator": [
+        45,
+        225,
+        137,
+        160,
+        30,
+        146,
+        169,
+        197
+      ],
+      "accounts": [
+        {
+          "name": "caller",
+          "docs": [
+            "Any signer may execute this deterministic liveness migration."
+          ],
+          "signer": true
+        },
+        {
+          "name": "epoch_state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  112,
+                  111,
+                  99,
+                  104,
+                  95,
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "clear_trading_pause",
+      "docs": [
+        "Clear the indefinite manual trading pause.",
+        "",
+        "Only the primary pause authority is admitted. Redundant authorized",
+        "calls succeed without emitting an event so rotate-and-clear batches are",
+        "race safe."
+      ],
+      "discriminator": [
+        5,
+        185,
+        51,
+        45,
+        80,
+        18,
+        240,
+        75
+      ],
+      "accounts": [
+        {
+          "name": "signer",
+          "docs": [
+            "Primary pause authority; no other role has clearing power."
+          ],
+          "signer": true
+        },
+        {
+          "name": "arb_config",
+          "docs": [
+            "Global ArbConfig PDA, read only."
+          ],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  114,
+                  98,
+                  95,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "epoch_state",
+          "docs": [
+            "Global EpochState PDA whose flag is changed."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  112,
+                  111,
+                  99,
+                  104,
+                  95,
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "consume_randomness",
       "docs": [
         "Consume revealed VRF randomness and update taxes.",
@@ -133,11 +325,9 @@
         {
           "name": "carnage_state",
           "docs": [
-            "Carnage Fund state (for checking holdings and auto-expire).",
-            "Optional - if not provided, Carnage trigger check is skipped.",
-            "This allows backward compatibility and gradual rollout."
+            "Canonical Carnage Fund state. This consequence account is mandatory:",
+            "callers cannot commit new taxes while omitting Carnage processing."
           ],
-          "optional": true,
           "pda": {
             "seeds": [
               {
@@ -452,7 +642,12 @@
           "address": "11111111111111111111111111111111"
         }
       ],
-      "args": []
+      "args": [
+        {
+          "name": "generation",
+          "type": "u32"
+        }
+      ]
     },
     {
       "name": "execute_carnage_atomic",
@@ -468,7 +663,7 @@
         "3. If no holdings: just buy target token via Tax::swap_exempt",
         "",
         "All swaps are tax-exempt (0% tax, 1% LP fee only) via Tax::swap_exempt.",
-        "Swap amount capped at MAX_CARNAGE_SWAP_LAMPORTS (1000 SOL).",
+        "Swap amount is capped adaptively from the live SOL reserve and tax-pair friction.",
         "",
         "CRITICAL CPI DEPTH: This path reaches Solana's 4-level limit:",
         "execute_carnage_atomic -> Tax::swap_exempt -> AMM::swap_sol_pool",
@@ -763,7 +958,12 @@
           "address": "11111111111111111111111111111111"
         }
       ],
-      "args": []
+      "args": [
+        {
+          "name": "generation",
+          "type": "u32"
+        }
+      ]
     },
     {
       "name": "expire_carnage",
@@ -895,7 +1095,118 @@
           }
         }
       ],
-      "args": []
+      "args": [
+        {
+          "name": "generation",
+          "type": "u32"
+        }
+      ]
+    },
+    {
+      "name": "initialize_arb_config",
+      "docs": [
+        "Initialize the global ArbConfig PDA.",
+        "",
+        "The payer must be the deployed Epoch program's verified ProgramData",
+        "upgrade authority and becomes `arb_config.authority`; authority is",
+        "deliberately not accepted as an argument. Anchor's `init` constraint",
+        "rejects re-initialization when the PDA already exists.",
+        "",
+        "Source: Centralized-Arb MVP Spec §3.1, §14.1 ruling 13, and §14.6",
+        "entries 1, 5, and 6."
+      ],
+      "discriminator": [
+        142,
+        196,
+        18,
+        44,
+        41,
+        14,
+        140,
+        134
+      ],
+      "accounts": [
+        {
+          "name": "payer",
+          "docs": [
+            "Payer for account creation rent and verified initial authority."
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "arb_config",
+          "docs": [
+            "Global ArbConfig PDA. Anchor `init` makes re-initialization impossible."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  114,
+                  98,
+                  95,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "program",
+          "docs": [
+            "The Epoch program — used to look up its ProgramData address."
+          ],
+          "address": "4Heqc8QEjJCspHR8y96wgZBnBfbe3Qb8N6JBZMQt9iw2"
+        },
+        {
+          "name": "program_data",
+          "docs": [
+            "ProgramData account — upgrade_authority must match payer."
+          ]
+        },
+        {
+          "name": "system_program",
+          "docs": [
+            "System program for account creation."
+          ],
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "wallet_a",
+          "type": "pubkey"
+        },
+        {
+          "name": "wallet_b",
+          "type": "pubkey"
+        },
+        {
+          "name": "pause_slots",
+          "type": "u64"
+        },
+        {
+          "name": "epoch_length_slots",
+          "type": "u64"
+        },
+        {
+          "name": "pause_authority",
+          "type": "pubkey"
+        },
+        {
+          "name": "pause_tripwire",
+          "type": "pubkey"
+        }
+      ]
     },
     {
       "name": "initialize_carnage_fund",
@@ -1239,7 +1550,7 @@
         {
           "name": "payer",
           "docs": [
-            "Payer for the retry (anyone can call)."
+            "Payer for the retry. Must be wallet A/B until public recovery opens."
           ],
           "signer": true
         },
@@ -1271,6 +1582,32 @@
           }
         },
         {
+          "name": "arb_config",
+          "docs": [
+            "Canonical keeper roster. Wallet A/B get the first recovery window;",
+            "public callers are admitted only after that bounded preference expires."
+          ],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  114,
+                  98,
+                  95,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
           "name": "randomness_account",
           "docs": [
             "Fresh Switchboard randomness account (replaces stale one)."
@@ -1280,12 +1617,192 @@
       "args": []
     },
     {
+      "name": "set_trading_pause",
+      "docs": [
+        "Set the indefinite manual trading pause.",
+        "",
+        "The primary pause authority and the set-only tripwire are admitted.",
+        "Redundant authorized calls succeed without emitting an event."
+      ],
+      "discriminator": [
+        47,
+        96,
+        4,
+        63,
+        224,
+        104,
+        81,
+        169
+      ],
+      "accounts": [
+        {
+          "name": "signer",
+          "docs": [
+            "Primary pause authority or set-only tripwire."
+          ],
+          "signer": true
+        },
+        {
+          "name": "arb_config",
+          "docs": [
+            "Global ArbConfig PDA, read only."
+          ],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  114,
+                  98,
+                  95,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "epoch_state",
+          "docs": [
+            "Global EpochState PDA whose flag is changed."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  112,
+                  111,
+                  99,
+                  104,
+                  95,
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "terminal_vrf_fallback",
+      "docs": [
+        "Resolve a VRF generation after its final attempt times out or its",
+        "absolute lifetime is reached. Keeps the last confirmed taxes, finalizes",
+        "Staking, schedules no Carnage, and clears pending state permissionlessly."
+      ],
+      "discriminator": [
+        162,
+        116,
+        114,
+        83,
+        115,
+        232,
+        63,
+        227
+      ],
+      "accounts": [
+        {
+          "name": "caller",
+          "docs": [
+            "Anyone may restore liveness after an objective on-chain limit."
+          ],
+          "signer": true
+        },
+        {
+          "name": "epoch_state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  112,
+                  111,
+                  99,
+                  104,
+                  95,
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "staking_authority",
+          "docs": [
+            "Epoch Program PDA authorized by Staking."
+          ],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  107,
+                  105,
+                  110,
+                  103,
+                  95,
+                  97,
+                  117,
+                  116,
+                  104,
+                  111,
+                  114,
+                  105,
+                  116,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "stake_pool",
+          "docs": [
+            "Staking singleton updated by the canonical Staking program."
+          ],
+          "writable": true
+        },
+        {
+          "name": "staking_program",
+          "docs": [
+            "Canonical Staking program."
+          ],
+          "address": "12b3t1cNiAUoYLiWFEnFa4w6qYxVAiqCWU7KZuzLPYtH"
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "trigger_epoch_transition",
       "docs": [
         "Trigger an epoch transition.",
         "",
-        "Called permissionlessly when epoch boundary is reached. Validates and",
-        "binds a Switchboard randomness account for anti-reroll protection.",
+        "Called by a configured arb wallet when the epoch boundary is reached,",
+        "or permissionlessly once the grace window opens. Validates and binds a",
+        "Switchboard randomness account for anti-reroll protection.",
         "Client must bundle this with Switchboard SDK commitIx.",
         "",
         "This is the first instruction in the VRF three-transaction flow:",
@@ -1294,13 +1811,15 @@
         "3. TX 3: Client bundles SDK revealIx + consume_randomness",
         "",
         "# Accounts",
-        "- `payer`: Anyone, receives 0.001 SOL bounty from Carnage SOL vault",
+        "- `payer`: Arb wallet before grace; anyone after grace; receives the bounty",
         "- `epoch_state`: Global epoch state (mutated)",
+        "- `arb_config`: Live epoch length, pause length, and trigger wallets",
         "- `carnage_sol_vault`: Carnage SOL vault PDA (funds bounty via invoke_signed)",
         "- `randomness_account`: Switchboard On-Demand account",
         "",
         "# Errors",
         "- `EpochBoundaryNotReached` if current slot hasn't passed next epoch boundary",
+        "- `UnauthorizedTrigger` if a stranger calls before the grace boundary",
         "- `VrfAlreadyPending` if a VRF request is already in progress",
         "- `RandomnessParseError` if randomness account data is invalid",
         "- `RandomnessExpired` if seed_slot is stale (> 1 slot behind)",
@@ -1321,7 +1840,7 @@
           "name": "payer",
           "docs": [
             "Payer who triggers the transition. Receives the trigger bounty.",
-            "Anyone can call - permissionless epoch advancement."
+            "Must be wallet_a/wallet_b until the inclusive grace boundary opens."
           ],
           "writable": true,
           "signer": true
@@ -1349,6 +1868,32 @@
                   97,
                   116,
                   101
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "arb_config",
+          "docs": [
+            "ArbConfig -- live-read epoch length and wallet gate.",
+            "Hard-required after upgrade; the upgrade and initialization share one ceremony batch."
+          ],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  114,
+                  98,
+                  95,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
                 ]
               }
             ]
@@ -1402,9 +1947,90 @@
         }
       ],
       "args": []
+    },
+    {
+      "name": "update_arb_config",
+      "docs": [
+        "Update ArbConfig one-shot fields or initiate, overwrite, or cancel a",
+        "pending two-step authority transfer.",
+        "",
+        "The current authority remains active until the pending signer accepts.",
+        "A default `new_authority` cancels only the pending transfer and never",
+        "writes the active authority.",
+        "",
+        "Source: Centralized-Arb MVP Spec §3.1 and §14.6 entries 4, 5, and 6."
+      ],
+      "discriminator": [
+        207,
+        149,
+        212,
+        145,
+        156,
+        223,
+        35,
+        71
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "docs": [
+            "Current ArbConfig authority. Pending authorities have no powers yet."
+          ],
+          "signer": true
+        },
+        {
+          "name": "arb_config",
+          "docs": [
+            "Global ArbConfig PDA."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  114,
+                  98,
+                  95,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "args",
+          "type": {
+            "defined": {
+              "name": "UpdateArbConfigArgs"
+            }
+          }
+        }
+      ]
     }
   ],
   "accounts": [
+    {
+      "name": "ArbConfig",
+      "discriminator": [
+        135,
+        81,
+        18,
+        100,
+        131,
+        57,
+        107,
+        219
+      ]
+    },
     {
       "name": "CarnageFundState",
       "discriminator": [
@@ -1433,6 +2059,19 @@
     }
   ],
   "events": [
+    {
+      "name": "ArbConfigUpdated",
+      "discriminator": [
+        215,
+        224,
+        252,
+        230,
+        236,
+        78,
+        232,
+        143
+      ]
+    },
     {
       "name": "CarnageExecuted",
       "discriminator": [
@@ -1512,6 +2151,19 @@
       ]
     },
     {
+      "name": "EpochSafetyActivated",
+      "discriminator": [
+        163,
+        246,
+        189,
+        6,
+        132,
+        181,
+        78,
+        136
+      ]
+    },
+    {
       "name": "EpochStateInitialized",
       "discriminator": [
         128,
@@ -1551,6 +2203,19 @@
       ]
     },
     {
+      "name": "TradingPauseChanged",
+      "discriminator": [
+        96,
+        164,
+        17,
+        28,
+        21,
+        255,
+        240,
+        130
+      ]
+    },
+    {
       "name": "VrfRetryRequested",
       "discriminator": [
         145,
@@ -1561,6 +2226,19 @@
         230,
         121,
         161
+      ]
+    },
+    {
+      "name": "VrfTerminalFallback",
+      "discriminator": [
+        165,
+        131,
+        78,
+        78,
+        222,
+        43,
+        89,
+        80
       ]
     }
   ],
@@ -1729,9 +2407,280 @@
       "code": 6032,
       "name": "InvalidCheapSide",
       "msg": "Invalid cheap_side value -- expected 0 (CRIME) or 1 (FRAUD)"
+    },
+    {
+      "code": 6033,
+      "name": "EpochLengthOutOfBounds",
+      "msg": "Epoch length is outside the allowed range"
+    },
+    {
+      "code": 6034,
+      "name": "PauseSlotsExceedsMax",
+      "msg": "Pause slots exceed the allowed maximum"
+    },
+    {
+      "code": 6035,
+      "name": "PauseSlotsNotBelowEpochLength",
+      "msg": "Pause slots must be below the epoch length"
+    },
+    {
+      "code": 6036,
+      "name": "ZeroPubkeyForbidden",
+      "msg": "Zero pubkeys are forbidden for ArbConfig roles"
+    },
+    {
+      "code": 6037,
+      "name": "RoleOverlapForbidden",
+      "msg": "ArbConfig role overlap is forbidden"
+    },
+    {
+      "code": 6038,
+      "name": "UnauthorizedArbConfigAuthority",
+      "msg": "Unauthorized ArbConfig authority"
+    },
+    {
+      "code": 6039,
+      "name": "NoPendingAuthority",
+      "msg": "No ArbConfig authority transfer is pending"
+    },
+    {
+      "code": 6040,
+      "name": "UnauthorizedPendingAuthority",
+      "msg": "Unauthorized pending ArbConfig authority"
+    },
+    {
+      "code": 6041,
+      "name": "UnauthorizedTrigger",
+      "msg": "Unauthorized epoch transition trigger"
+    },
+    {
+      "code": 6042,
+      "name": "UnauthorizedPauseSet",
+      "msg": "Unauthorized trading pause setter"
+    },
+    {
+      "code": 6043,
+      "name": "UnauthorizedPauseClear",
+      "msg": "Unauthorized trading pause clearer"
+    },
+    {
+      "code": 6044,
+      "name": "RandomnessQueueMismatch",
+      "msg": "Randomness account belongs to an unapproved Switchboard queue"
+    },
+    {
+      "code": 6045,
+      "name": "SafetyActivationRequired",
+      "msg": "Epoch safety state must be activated before transitions"
+    },
+    {
+      "code": 6046,
+      "name": "SafetyAlreadyActivated",
+      "msg": "Epoch safety state is already activated"
+    },
+    {
+      "code": 6047,
+      "name": "SafetyActivationRequiresQuiescent",
+      "msg": "Epoch safety activation requires quiescent VRF and Carnage state"
+    },
+    {
+      "code": 6048,
+      "name": "RandomnessCommitmentMismatch",
+      "msg": "Randomness commitment does not match the bound seed slot"
+    },
+    {
+      "code": 6049,
+      "name": "VrfAttemptLimitReached",
+      "msg": "VRF attempt limit reached"
+    },
+    {
+      "code": 6050,
+      "name": "VrfAbsoluteAgeLimitReached",
+      "msg": "VRF absolute pending-age limit reached"
+    },
+    {
+      "code": 6051,
+      "name": "VrfTerminalLimitNotReached",
+      "msg": "VRF terminal fallback limit has not been reached"
+    },
+    {
+      "code": 6052,
+      "name": "CarnageGenerationMismatch",
+      "msg": "Carnage generation does not match the pending action"
+    },
+    {
+      "code": 6053,
+      "name": "CarnagePendingBlocksTransition",
+      "msg": "Pending Carnage blocks a new epoch transition"
+    },
+    {
+      "code": 6054,
+      "name": "PreviousTransitionUnconfirmed",
+      "msg": "Previous epoch transition is not confirmed"
+    },
+    {
+      "code": 6055,
+      "name": "RandomnessReplacementUnchanged",
+      "msg": "VRF retry randomness account must differ from the pending account"
+    },
+    {
+      "code": 6056,
+      "name": "VrfTerminalTransitionRequired",
+      "msg": "VRF generation requires terminal fallback"
+    },
+    {
+      "code": 6057,
+      "name": "UnauthorizedVrfRetry",
+      "msg": "Unauthorized VRF retry before the public recovery window"
     }
   ],
   "types": [
+    {
+      "name": "ArbConfig",
+      "docs": [
+        "Global arbitrage and epoch-timing configuration.",
+        "",
+        "Single PDA: seeds = `[b\"arb_config\"]`.",
+        "",
+        "Source: Centralized-Arb MVP Spec §3.1, §14.1, and §14.6."
+      ],
+      "repr": {
+        "kind": "c"
+      },
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "authority",
+            "docs": [
+              "Squads authority. Initialized from the verified ProgramData upgrade",
+              "authority signer, never from an instruction argument."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "pending_authority",
+            "docs": [
+              "Proposed successor for two-step authority transfer.",
+              "`Pubkey::default()` means no transfer is pending."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "wallet_a",
+            "docs": [
+              "Primary protocol-owned arbitrage wallet."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "wallet_b",
+            "docs": [
+              "Standby protocol-owned arbitrage wallet.",
+              "Equality with wallet_a is the sole allowed cross-role overlap."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "pause_authority",
+            "docs": [
+              "Cold authority allowed to set and clear the manual trading pause."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "pause_tripwire",
+            "docs": [
+              "Hot tripwire allowed to set, but never clear, the manual trading pause."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "pause_slots",
+            "docs": [
+              "Post-transition exclusivity pause in slots. Zero is legal."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "epoch_length_slots",
+            "docs": [
+              "Live-read epoch length in slots."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "docs": [
+              "PDA bump seed."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "reserved",
+            "docs": [
+              "Reserved padding for future fixed-layout evolution."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                64
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "ArbConfigUpdated",
+      "docs": [
+        "Emitted after ArbConfig initialization and every successful config change.",
+        "",
+        "Carries the complete post-change configuration so off-chain consumers never",
+        "need to reconstruct state from partial update events."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "pending_authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "wallet_a",
+            "type": "pubkey"
+          },
+          {
+            "name": "wallet_b",
+            "type": "pubkey"
+          },
+          {
+            "name": "pause_authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "pause_tripwire",
+            "type": "pubkey"
+          },
+          {
+            "name": "pause_slots",
+            "type": "u64"
+          },
+          {
+            "name": "epoch_length_slots",
+            "type": "u64"
+          },
+          {
+            "name": "slot",
+            "type": "u64"
+          }
+        ]
+      }
+    },
     {
       "name": "CarnageExecuted",
       "docs": [
@@ -2162,6 +3111,30 @@
       }
     },
     {
+      "name": "EpochSafetyActivated",
+      "docs": [
+        "Emitted by the one-way, quiescent migration that activates the bounded",
+        "VRF/Carnage state-machine fields carved from reserved bytes."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "version",
+            "type": "u8"
+          },
+          {
+            "name": "slot",
+            "type": "u64"
+          },
+          {
+            "name": "activated_by",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
       "name": "EpochState",
       "docs": [
         "Global epoch state account.",
@@ -2195,9 +3168,16 @@
         "- carnage_deadline_slot: 8 bytes",
         "- carnage_lock_slot: 8 bytes",
         "- last_carnage_epoch: 4 bytes",
-        "- initialized: 1 byte",
-        "- bump: 1 byte",
-        "- reserved: 64 bytes (future schema evolution padding)",
+        "- pause_end_slot: 8 bytes",
+        "- trading_paused: 1 byte",
+        "- safety_version: 1 byte",
+        "- vrf_transition_start_slot: 8 bytes",
+        "- pending_seed_slot: 8 bytes",
+        "- vrf_attempts: 1 byte",
+        "- carnage_generation: 4 bytes",
+        "- last_degraded_epoch: 4 bytes",
+        "- last_vrf_fallback_reason: 1 byte",
+        "- reserved: 28 bytes (future schema evolution padding)",
         "- initialized: 1 byte",
         "- bump: 1 byte",
         "Total: 8 + 164 = 172 bytes",
@@ -2214,7 +3194,7 @@
             "name": "genesis_slot",
             "docs": [
               "Slot when protocol was initialized (genesis).",
-              "Used for epoch calculation: epoch = (current_slot - genesis_slot) / SLOTS_PER_EPOCH"
+              "Retained as immutable display/reference data after the incremental-clock cutover."
             ],
             "type": "u64"
           },
@@ -2230,7 +3210,7 @@
             "name": "epoch_start_slot",
             "docs": [
               "Slot when the current epoch started.",
-              "Calculated: genesis_slot + (current_epoch * SLOTS_PER_EPOCH)"
+              "Re-anchored to clock.slot after every successful transition."
             ],
             "type": "u64"
           },
@@ -2370,11 +3350,89 @@
             "type": "u32"
           },
           {
+            "name": "pause_end_slot",
+            "docs": [
+              "Absolute slot at which the post-transition trading pause ends (exclusive).",
+              "Written at every epoch transition as clock.slot + arb_config.pause_slots (spec §14.2 correction).",
+              "Pre-upgrade bytes here are zero => 0 => \"no pause\" until the first post-upgrade transition."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "trading_paused",
+            "docs": [
+              "Manual protocol trading-pause flag (spec §14.3 ruling 3, §14.6).",
+              "Set by pause_authority OR pause_tripwire; cleared by pause_authority ONLY.",
+              "Pre-upgrade bytes are zero => false. Flag only — who/when live in events."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "safety_version",
+            "docs": [
+              "Reserved-byte schema version. Zero is the pre-remediation layout and is",
+              "deliberately rejected until `activate_epoch_safety` runs while the",
+              "singleton has no pending VRF or Carnage work."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "vrf_transition_start_slot",
+            "docs": [
+              "Immutable start slot for the current VRF generation. Unlike",
+              "`vrf_request_slot`, this is never changed by a retry."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "pending_seed_slot",
+            "docs": [
+              "Switchboard commitment snapshot paired with",
+              "`pending_randomness_account`. Consume requires the parsed account to",
+              "retain this exact seed slot."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "vrf_attempts",
+            "docs": [
+              "Number of VRF commitments made for this transition, including the",
+              "initial trigger commitment."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "carnage_generation",
+            "docs": [
+              "Epoch/generation to which pending Carnage belongs. Zero when no Carnage",
+              "is pending; callers must pass this generation explicitly."
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "last_degraded_epoch",
+            "docs": [
+              "Most recent epoch resolved via deterministic degraded fallback. The",
+              "companion reason is zero when no degraded fallback has ever occurred."
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "last_vrf_fallback_reason",
+            "docs": [
+              "Zero = none, 1 = final attempt timed out, 2 = absolute age reached."
+            ],
+            "type": "u8"
+          },
+          {
             "name": "reserved",
+            "docs": [
+              "Remaining reserved padding (64 total, with 36 bytes carved so far)."
+            ],
             "type": {
               "array": [
                 "u8",
-                64
+                28
               ]
             }
           },
@@ -2470,6 +3528,20 @@
               "Bounty paid to triggerer in lamports"
             ],
             "type": "u64"
+          },
+          {
+            "name": "randomness_queue",
+            "docs": [
+              "Cluster-pinned Switchboard queue accepted for this commitment."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "attempt",
+            "docs": [
+              "Commitment number within this generation (always 1 at trigger)."
+            ],
+            "type": "u8"
           }
         ]
       }
@@ -2524,6 +3596,86 @@
       }
     },
     {
+      "name": "TradingPauseChanged",
+      "docs": [
+        "Emitted only when the manual trading-pause flag actually changes."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "paused",
+            "type": "bool"
+          },
+          {
+            "name": "setter",
+            "type": "pubkey"
+          },
+          {
+            "name": "slot",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "UpdateArbConfigArgs",
+      "docs": [
+        "Optional ArbConfig changes applied by the current authority.",
+        "",
+        "Every supplied wallet, pause key, or timing value takes effect immediately.",
+        "`new_authority` only changes `pending_authority`; the active authority is",
+        "changed exclusively by `accept_arb_config_authority`."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "new_authority",
+            "type": {
+              "option": "pubkey"
+            }
+          },
+          {
+            "name": "new_wallet_a",
+            "type": {
+              "option": "pubkey"
+            }
+          },
+          {
+            "name": "new_wallet_b",
+            "type": {
+              "option": "pubkey"
+            }
+          },
+          {
+            "name": "new_pause_slots",
+            "type": {
+              "option": "u64"
+            }
+          },
+          {
+            "name": "new_epoch_length_slots",
+            "type": {
+              "option": "u64"
+            }
+          },
+          {
+            "name": "new_pause_authority",
+            "type": {
+              "option": "pubkey"
+            }
+          },
+          {
+            "name": "new_pause_tripwire",
+            "type": {
+              "option": "pubkey"
+            }
+          }
+        ]
+      }
+    },
+    {
       "name": "VrfRetryRequested",
       "docs": [
         "Emitted when a VRF retry is requested after timeout.",
@@ -2562,6 +3714,91 @@
               "Public key of the account that requested the retry"
             ],
             "type": "pubkey"
+          },
+          {
+            "name": "transition_start_slot",
+            "docs": [
+              "Immutable slot at which this transition first became pending."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "attempt",
+            "docs": [
+              "Cumulative commitment number after this retry."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "randomness_queue",
+            "docs": [
+              "Cluster-pinned Switchboard queue accepted for the replacement."
+            ],
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "VrfTerminalFallback",
+      "docs": [
+        "Emitted when an objectively failed VRF generation is resolved without new",
+        "randomness. The prior confirmed tax tuple is retained, Staking is finalized,",
+        "no Carnage action is scheduled, and the pending commitment is cleared."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "epoch",
+            "type": "u32"
+          },
+          {
+            "name": "reason",
+            "docs": [
+              "1 = final configured attempt timed out; 2 = absolute pending age reached."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "attempts",
+            "type": "u8"
+          },
+          {
+            "name": "transition_start_slot",
+            "type": "u64"
+          },
+          {
+            "name": "resolved_slot",
+            "type": "u64"
+          },
+          {
+            "name": "cheap_side",
+            "type": "u8"
+          },
+          {
+            "name": "crime_buy_tax_bps",
+            "type": "u16"
+          },
+          {
+            "name": "crime_sell_tax_bps",
+            "type": "u16"
+          },
+          {
+            "name": "fraud_buy_tax_bps",
+            "type": "u16"
+          },
+          {
+            "name": "fraud_sell_tax_bps",
+            "type": "u16"
+          },
+          {
+            "name": "pause_end_slot",
+            "type": "u64"
+          },
+          {
+            "name": "staking_finalized",
+            "type": "bool"
           }
         ]
       }

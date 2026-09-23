@@ -230,6 +230,152 @@
       ]
     },
     {
+      "name": "extract_profit",
+      "docs": [
+        "Phase 148 — one-shot extraction of 4.5M PROFIT to the Squads vault PDA's PROFIT ATA.",
+        "Spec: `.docs/v1.9/extract-profit-spec.md`. Callable ONLY by the Squads vault PDA;",
+        "cannot be re-run (MigrationConfig PDA enforces one-shot via Anchor `init`)."
+      ],
+      "discriminator": [
+        211,
+        129,
+        26,
+        30,
+        26,
+        134,
+        179,
+        86
+      ],
+      "accounts": [
+        {
+          "name": "vault_config",
+          "docs": [
+            "Singleton vault state PDA (signer for the transfer CPI via vault_config bump)."
+          ],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116,
+                  95,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault_profit",
+          "docs": [
+            "Conversion Vault's PROFIT token account — extraction SOURCE.",
+            "TRIPLE CONSTRAINT (defense-in-depth, spec I5):",
+            "- `token::mint = profit_mint` rejects CRIME/FRAUD vault substitution at framework layer",
+            "- `token::authority = vault_config` pins ownership to the vault PDA",
+            "- `address = ...` removes any remaining substitution ambiguity (cluster literal pinned)",
+            "Phase 149 OBS-01 fix: `address` now sourced from cfg-gated `constants::VAULT_PROFIT_ATA_PUBKEY`",
+            "so one arm resolves correctly for BOTH devnet and mainnet builds."
+          ],
+          "writable": true,
+          "address": "DBMaWgfUW8WBb8VVvqDFkrMpEkPkCPTcLpSpyzHAiwp3"
+        },
+        {
+          "name": "destination_ata",
+          "docs": [
+            "Squads vault PDA's PROFIT ATA — extraction DESTINATION.",
+            "`token::mint = profit_mint` + `token::authority = SQUADS_VAULT_PUBKEY` + `address = DESTINATION_ATA_PUBKEY`",
+            "Phase 149 OBS-01 fix: literals migrated to cfg-gated consts; one arm covers devnet + mainnet."
+          ],
+          "writable": true,
+          "address": "2xWqYxbZb1a5khGq3Lx4EVm33zreFZKX4pfZZk6RLPeq"
+        },
+        {
+          "name": "migration_config",
+          "docs": [
+            "One-shot sentinel. `init` fails with AccountAlreadyInUse on second invocation.",
+            "Spec I7 — MUST be `init`, NEVER `init_if_needed` (replay defense)."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  105,
+                  103,
+                  114,
+                  97,
+                  116,
+                  105,
+                  111,
+                  110,
+                  95,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "payer",
+          "docs": [
+            "Must be the Squads vault PDA — the only entity authorized to extract (spec I6).",
+            "Phase 149 OBS-01 fix: pinned via cfg-gated `SQUADS_VAULT_PUBKEY` const",
+            "(devnet: `HM6PJAr...`, mainnet: `GDY4Qu3...`). Localnet: runtime override."
+          ],
+          "writable": true,
+          "signer": true,
+          "address": "GDY4Qu3xGNGZxXdLs1h6eoMXZgJ9aPpv7jtCaqzMoDcN"
+        },
+        {
+          "name": "profit_mint",
+          "docs": [
+            "PROFIT mint (pinned to address for explicit defense-in-depth).",
+            "Phase 149 OBS-01 + OBS-10 fix: spec I2 narrative said \"mainnet AND devnet share",
+            "the same PROFIT mint pubkey\" — UNTRUE in reality. Devnet has its own PROFIT mint",
+            "(`Eaipvk74...`), distinct from mainnet vanity (`pRoFiTj36...`). cfg-gated const",
+            "now correctly resolves per cluster."
+          ],
+          "address": "pRoFiTj36haRD5sG2Neqib9KoSrtdYMGrM7SEkZetfR"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "transfer_hook_program"
+        },
+        {
+          "name": "extra_account_meta_list"
+        },
+        {
+          "name": "whitelist_source"
+        },
+        {
+          "name": "whitelist_dest"
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "initialize",
       "docs": [
         "One-shot vault initialization. Creates VaultConfig PDA and 3 token accounts.",
@@ -420,6 +566,19 @@
   ],
   "accounts": [
     {
+      "name": "MigrationConfig",
+      "discriminator": [
+        221,
+        35,
+        251,
+        172,
+        252,
+        90,
+        70,
+        161
+      ]
+    },
+    {
       "name": "VaultConfig",
       "discriminator": [
         99,
@@ -478,9 +637,41 @@
       "code": 6008,
       "name": "DeltaUnderflow",
       "msg": "Pre-balance exceeds current balance — stale or incorrect snapshot"
+    },
+    {
+      "code": 6009,
+      "name": "InvalidMint",
+      "msg": "Account passed is not the PROFIT mint"
+    },
+    {
+      "code": 6010,
+      "name": "InvalidDestination",
+      "msg": "Destination ATA does not match the canonical Squads vault PROFIT ATA"
+    },
+    {
+      "code": 6011,
+      "name": "MigrationAlreadyExecuted",
+      "msg": "Migration already executed — MigrationConfig PDA exists"
     }
   ],
   "types": [
+    {
+      "name": "MigrationConfig",
+      "docs": [
+        "One-shot sentinel PDA whose mere existence blocks replay of `extract_profit`.",
+        "Created by Anchor `init` in `extract_profit`'s Accounts struct. Zero data fields:",
+        "only the 8-byte Anchor discriminator. Second invocation of `extract_profit` fails",
+        "at the System Program `create_account` CPI with `AccountAlreadyInUse` — deterministic",
+        "Solana runtime, not application logic. See spec § Section 7.",
+        "",
+        "Phase 152 revert binary REMOVES the `extract_profit` IX selector; the PDA continues",
+        "to exist as inert storage. See spec § Section 9 + invariant I14."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": []
+      }
+    },
     {
       "name": "VaultConfig",
       "docs": [
