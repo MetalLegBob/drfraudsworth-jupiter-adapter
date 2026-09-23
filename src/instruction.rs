@@ -126,6 +126,9 @@ mod tests {
             assert_eq!(lane.discriminator(), expected);
             assert_eq!(lane.discriminator(), hash[..8]);
         }
+
+        let vault_hash = Sha256::digest("global:convert_v2");
+        assert_eq!(CONVERT_V2_DISCRIMINATOR, vault_hash[..8]);
     }
 
     #[test]
