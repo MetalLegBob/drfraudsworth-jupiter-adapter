@@ -27,13 +27,15 @@ Mainnet snapshots are hex-embedded at fixed fetch dates (see comments in the
 two snapshot suites), keeping the suite deterministic and offline. Pilot pool
 addresses are test fixtures, not production admission logic.
 
-## Math-parity suite (protocol repository)
+## Math-parity suite (private protocol monorepo)
 
 Zero-tolerance proofs that the SDK's quote math equals the on-chain program
-math live in the protocol monorepo
-([github.com/MetalLegBob/drfraudsworth](https://github.com/MetalLegBob/drfraudsworth),
-`sdk/jupiter-adapter/tests/parity_*.rs`), because they compile against the
-on-chain program crates directly:
+math live in the private protocol monorepo, because they compile against the
+on-chain program crates directly. The source of the live on-chain programs is
+public in the
+[protocol repository](https://github.com/MetalLegBob/fantastical-finance-factory);
+the parity suite itself is not published, and its results can be provided
+during integration review. It covers:
 
 - 37 zero-tolerance SOL-pool and vault quote-math parity tests
 - Direct SPL account-meta parity against Anchor-generated Tax account structs
