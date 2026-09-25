@@ -5,9 +5,10 @@
 Jupiter AMM adapter for the Dr. Fraudsworth DEX protocol on Solana. Implements the `jupiter-amm-interface::Amm` trait so Jupiter's routing engine can route swaps through Dr. Fraudsworth's on-chain programs.
 
 This repository contains the standalone adapter crate and the six mainnet IDLs
-from the reviewed protocol release manifest. Historical protocol source and
-internal audit artifacts are available in the
-[protocol repository](https://github.com/MetalLegBob/drfraudsworth); see
+from the reviewed protocol release manifest. The source of the live on-chain
+programs is published in the
+[protocol repository](https://github.com/MetalLegBob/fantastical-finance-factory),
+which rebuilds to the exact deployed binaries; see
 [`SECURITY.md`](./SECURITY.md) for the current provenance and audit disclosure.
 
 **Key properties:**

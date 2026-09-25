@@ -18,12 +18,13 @@ Security fixes are applied to the latest published crate and the current
 
 ## Scope and audit status
 
-This repository contains an off-chain Jupiter adapter. Historical on-chain
-source and internal audit artifacts are available in the
-[protocol repository](https://github.com/MetalLegBob/drfraudsworth). Its public
-`main` branch is not a source-to-binary attestation for the September 2026
-mainnet upgrades. The current reproducible-build and finalized-chain readback
-records can be supplied during integration review.
+This repository contains an off-chain Jupiter adapter. The source of the live
+on-chain programs is published in the
+[protocol repository](https://github.com/MetalLegBob/fantastical-finance-factory).
+It rebuilds reproducibly to the exact binaries deployed on mainnet; the build
+images and expected executable hashes are listed in its
+`verification/mainnet-hashes.json`. Internal audit artifacts are not published.
+Finalized-chain readback records can be supplied during integration review.
 
 The bundled IDLs are byte-identical to the reviewed mainnet release artifacts.
 Neither the internal audit material nor the build/readback evidence is an
