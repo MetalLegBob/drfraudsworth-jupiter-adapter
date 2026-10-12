@@ -20,6 +20,9 @@ protocol minimum-output floor. Do not release before that upgrade is live.
   (none of them debit its lamports), so shared-accounts program authorities
   are never write-locked. Requires the same Tax upgrade for `swap_sol_sell`
   and the SPL lanes.
+- `swap_sol_sell` destinations no longer need to be controlled by the signer
+  (the Tax upgrade routes the gross output through the protocol intermediary
+  and forwards the net). Account layout unchanged.
 
 ## [0.2.0] - 2026-09-24
 

@@ -179,7 +179,7 @@ accounts) remains on-chain for direct callers but is not an integration target.
 
 21 named accounts + 4 transfer hook accounts = **25 total**
 
-Same order as `SwapSolBuyWsol`, including the `wsol_intermediary` PDA (account #16). The sell path routes the tax portion of the WSOL output through the intermediary before distributing it as native SOL.
+Same order as `SwapSolBuyWsol`, including the `wsol_intermediary` PDA (account #16). The AMM pays the gross WSOL output into the intermediary; the program forwards the net amount to `user_token_a` and unwraps the tax. The destination is only credited, so it does not have to be owned or controlled by the signer (shared-accounts program authority, custom `destinationTokenAccount`).
 
 ### SwapSplBuy / SwapSplSell
 
