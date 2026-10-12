@@ -509,7 +509,11 @@ fn get_swap_and_account_metas_buy_real_data() {
         })
         .unwrap();
 
-    assert_eq!(result.account_metas.len(), 24, "Buy: 20 named + 4 hook");
+    assert_eq!(
+        result.account_metas.len(),
+        25,
+        "Buy (swap_sol_buy_wsol): 21 named + 4 hook"
+    );
     assert_eq!(result.account_metas[0].pubkey, user);
     assert!(result.account_metas[0].is_signer);
     eprintln!(
@@ -529,7 +533,7 @@ fn get_swap_and_account_metas_buy_real_data() {
 #[test]
 fn real_data_metas_equal_constant_builder_metas() {
     use drfraudsworth_jupiter_adapter::accounts::sol_pool_accounts::{
-        build_buy_account_metas, build_sell_account_metas,
+        build_buy_wsol_account_metas, build_sell_account_metas,
     };
 
     for (pool_key, pool_hex, is_crime, token_mint) in [
@@ -573,7 +577,7 @@ fn real_data_metas_equal_constant_builder_metas() {
             })
             .unwrap()
             .account_metas;
-        let wrapper = build_buy_account_metas(&user, &wsol_ata, &token_ata, is_crime);
+        let wrapper = build_buy_wsol_account_metas(&user, &wsol_ata, &token_ata, is_crime);
         assert_eq!(
             generic, wrapper,
             "buy metas from mainnet data must equal constant-based metas"

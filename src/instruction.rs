@@ -2,15 +2,19 @@
 
 use crate::accounts::addresses::NATIVE_MINT;
 use crate::constants::{
-    CONVERT_V2_DISCRIMINATOR, SWAP_SOL_BUY_DISCRIMINATOR, SWAP_SOL_SELL_DISCRIMINATOR,
-    SWAP_SPL_BUY_DISCRIMINATOR, SWAP_SPL_SELL_DISCRIMINATOR,
+    CONVERT_V2_DISCRIMINATOR, SWAP_SOL_BUY_DISCRIMINATOR, SWAP_SOL_BUY_WSOL_DISCRIMINATOR,
+    SWAP_SOL_SELL_DISCRIMINATOR, SWAP_SPL_BUY_DISCRIMINATOR, SWAP_SPL_SELL_DISCRIMINATOR,
 };
 use solana_sdk::pubkey::Pubkey;
 
 /// Tax entrypoint selected from quote type and swap direction.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TaxSwapLane {
+    /// Legacy SOL buy: tax paid from the signer's native lamports. Never
+    /// selected by [`Self::for_mints`]; kept for direct callers.
     SolBuy,
+    /// SOL buy with the whole input (tax included) debited from WSOL.
+    SolBuyWsol,
     SolSell,
     SplBuy,
     SplSell,
@@ -28,7 +32,11 @@ impl TaxSwapLane {
     ) -> Option<Self> {
         let is_sol = *quote_mint == NATIVE_MINT;
         match (*input_mint == *quote_mint, *output_mint == *faction_mint) {
-            (true, true) => Some(if is_sol { Self::SolBuy } else { Self::SplBuy }),
+            (true, true) => Some(if is_sol {
+                Self::SolBuyWsol
+            } else {
+                Self::SplBuy
+            }),
             (false, false) if *input_mint == *faction_mint && *output_mint == *quote_mint => {
                 Some(if is_sol { Self::SolSell } else { Self::SplSell })
             }
@@ -36,27 +44,30 @@ impl TaxSwapLane {
         }
     }
 
+    /// True for lanes whose Anchor ABI carries the trailing `is_crime` byte.
+    pub const fn has_faction_witness(self) -> bool {
+        matches!(self, Self::SolBuy | Self::SolSell)
+    }
+
     pub const fn discriminator(self) -> [u8; 8] {
         match self {
             Self::SolBuy => SWAP_SOL_BUY_DISCRIMINATOR,
+            Self::SolBuyWsol => SWAP_SOL_BUY_WSOL_DISCRIMINATOR,
             Self::SolSell => SWAP_SOL_SELL_DISCRIMINATOR,
             Self::SplBuy => SWAP_SPL_BUY_DISCRIMINATOR,
             Self::SplSell => SWAP_SPL_SELL_DISCRIMINATOR,
         }
     }
 
-    /// Encode the selected Anchor Tax instruction. SOL lanes include the
-    /// `is_crime` argument; SPL lanes derive faction identity from PoolState.
+    /// Encode the selected Anchor Tax instruction. The legacy `swap_sol_buy`
+    /// and `swap_sol_sell` include the `is_crime` argument; `swap_sol_buy_wsol`
+    /// and the SPL lanes derive faction identity from PoolState.
     pub fn encode(self, amount_in: u64, minimum_output: u64, is_crime: bool) -> Vec<u8> {
-        let mut data = Vec::with_capacity(if matches!(self, Self::SolBuy | Self::SolSell) {
-            25
-        } else {
-            24
-        });
+        let mut data = Vec::with_capacity(if self.has_faction_witness() { 25 } else { 24 });
         data.extend_from_slice(&self.discriminator());
         data.extend_from_slice(&amount_in.to_le_bytes());
         data.extend_from_slice(&minimum_output.to_le_bytes());
-        if matches!(self, Self::SolBuy | Self::SolSell) {
+        if self.has_faction_witness() {
             data.push(u8::from(is_crime));
         }
         data
@@ -96,11 +107,16 @@ mod tests {
     use super::*;
     use sha2::{Digest, Sha256};
 
-    const VECTORS: [(TaxSwapLane, &str, [u8; 8]); 4] = [
+    const VECTORS: [(TaxSwapLane, &str, [u8; 8]); 5] = [
         (
             TaxSwapLane::SolBuy,
             "swap_sol_buy",
             [158, 213, 169, 65, 11, 116, 176, 25],
+        ),
+        (
+            TaxSwapLane::SolBuyWsol,
+            "swap_sol_buy_wsol",
+            [10, 131, 6, 8, 42, 57, 81, 88],
         ),
         (
             TaxSwapLane::SolSell,
@@ -140,7 +156,7 @@ mod tests {
             assert_eq!(&encoded[..8], &discriminator);
             assert_eq!(&encoded[8..16], &amount_in.to_le_bytes());
             assert_eq!(&encoded[16..24], &minimum_output.to_le_bytes());
-            if matches!(lane, TaxSwapLane::SolBuy | TaxSwapLane::SolSell) {
+            if lane.has_faction_witness() {
                 assert_eq!(&encoded[24..], &[1]);
             } else {
                 assert_eq!(encoded.len(), 24);
@@ -152,6 +168,7 @@ mod tests {
     fn sol_lane_encodes_faction_boolean() {
         assert_eq!(TaxSwapLane::SolBuy.encode(1, 2, true)[24], 1);
         assert_eq!(TaxSwapLane::SolSell.encode(1, 2, false)[24], 0);
+        assert_eq!(TaxSwapLane::SolBuyWsol.encode(1, 2, true).len(), 24);
     }
 
     #[test]
@@ -160,7 +177,7 @@ mod tests {
         let spl_quote = Pubkey::new_unique();
         assert_eq!(
             TaxSwapLane::for_mints(&NATIVE_MINT, &faction, &NATIVE_MINT, &faction),
-            Some(TaxSwapLane::SolBuy)
+            Some(TaxSwapLane::SolBuyWsol)
         );
         assert_eq!(
             TaxSwapLane::for_mints(&NATIVE_MINT, &faction, &faction, &NATIVE_MINT),

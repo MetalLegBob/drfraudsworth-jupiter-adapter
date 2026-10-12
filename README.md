@@ -107,6 +107,8 @@ SOL pool swaps have two fee components:
 2. **Dynamic tax:** 1-4% (cheap side) or 11-14% (expensive side), VRF-randomized each epoch (roughly 20 minutes). Tax is split across staking rewards (71%), Carnage Fund (24%), and treasury (5%)
 
 **Buy (quote -> faction):** Tax deducted from quote input before the AMM swap.
+For SOL buys the whole input, tax included, is debited from the WSOL source
+account (`swap_sol_buy_wsol`); no native SOL is touched.
 **Sell (faction -> quote):** Tax deducted from quote output after the AMM swap.
 
 SPL quote mints may use classic SPL Token or Token-2022. Token-2022 quotes are
@@ -123,6 +125,10 @@ evidence, not a mint allowlist; future quote assets are evaluated from their
 live mint account.
 
 Tax rates change every epoch (roughly 20 minutes). Jupiter's `update()` method refreshes EpochState to get current rates. Stale rates between quote and execution are handled by on-chain slippage protection (`minimum_output`).
+
+`minimum_output` is purely the caller's slippage bound; the Tax program
+enforces no protocol floor, so a route that bounds slippage at the route level
+may pass `0` for intermediate legs.
 
 ### Vault Conversions
 
@@ -158,17 +164,22 @@ remain independent of the trading pause.
 
 Each instruction type requires a specific set of accounts. Pool-specific accounts (pool PDA, mints, vaults, orientation) are derived from the parsed `PoolState`; protocol singletons (authorities, staking, treasury, programs) are hardcoded mainnet addresses. Zero network calls.
 
-### SwapSolBuy (SOL -> CRIME/FRAUD)
+### SwapSolBuyWsol (SOL -> CRIME/FRAUD)
 
-20 named accounts + 4 transfer hook accounts = **24 total**
+21 named accounts + 4 transfer hook accounts = **25 total**
 
-Named accounts: user, epoch_state, swap_authority, tax_authority, pool, pool_vault_a, pool_vault_b, mint_a (WSOL), mint_b (token), user_token_a, user_token_b, stake_pool, staking_escrow, carnage_vault, treasury, amm_program, token_program_a (SPL Token), token_program_b (Token-2022), system_program, staking_program.
+Named accounts: user, epoch_state, swap_authority (writable), tax_authority, pool, pool_vault_a, pool_vault_b, mint_a (WSOL), mint_b (token), user_token_a, user_token_b, stake_pool, staking_escrow, carnage_vault, treasury, wsol_intermediary, amm_program, token_program_a (SPL Token), token_program_b (Token-2022), system_program, staking_program.
+
+The full `amount_in` is debited from `user_token_a` (WSOL). The tax portion is
+moved to the protocol's `wsol_intermediary`, unwrapped and distributed inside
+the instruction. The legacy `swap_sol_buy` (tax from native lamports, 24
+accounts) remains on-chain for direct callers but is not an integration target.
 
 ### SwapSolSell (CRIME/FRAUD -> SOL)
 
 21 named accounts + 4 transfer hook accounts = **25 total**
 
-Same as buy, plus `wsol_intermediary` PDA (account #16). The sell path routes SOL through an intermediary WSOL account before closing it back to the user.
+Same order as `SwapSolBuyWsol`, including the `wsol_intermediary` PDA (account #16). The sell path routes the tax portion of the WSOL output through the intermediary before distributing it as native SOL.
 
 ### SwapSplBuy / SwapSplSell
 
@@ -283,7 +294,7 @@ Full address set is in `deployments/mainnet.json` in the protocol repository. Ke
 
 ## Jupiter Integration Notes
 
-- **Swap variant:** Published interface 0.6.1 has no protocol-specific or generic pre-integration variant. The current `Swap::TokenSwap` return is a review placeholder only and must not be interpreted as a production SPL Token Swap route. Jupiter's final integration must allocate the real variant/processor and map direction and quote type to `swap_sol_buy`, `swap_sol_sell`, `swap_spl_buy`, `swap_spl_sell`, or vault `convert_v2`. `instruction::TaxSwapLane` and `instruction::VaultConvertV2` export the reviewed encoders. SPL Tax lanes are 24 bytes; SOL Tax lanes append `is_crime` and are 25 bytes; `convert_v2` is 32 bytes. Golden tests derive the discriminators from their Anchor preimages and pin every layout.
+- **Swap variant:** Published interface 0.6.1 has no protocol-specific or generic pre-integration variant. The current `Swap::TokenSwap` return is a review placeholder only and must not be interpreted as a production SPL Token Swap route. Jupiter's final integration must allocate the real variant/processor and map direction and quote type to `swap_sol_buy_wsol`, `swap_sol_sell`, `swap_spl_buy`, `swap_spl_sell`, or vault `convert_v2`. `instruction::TaxSwapLane` and `instruction::VaultConvertV2` export the reviewed encoders. `swap_sol_buy_wsol` and the SPL Tax lanes are 24 bytes; `swap_sol_sell` appends `is_crime` and is 25 bytes; `convert_v2` is 32 bytes. Golden tests derive the discriminators from their Anchor preimages and pin every layout.
 - **Vault instance keying:** Synthetic PDAs derived from `[b"jup_vault", input_mint, output_mint]` via `Pubkey::find_program_address`. These are not real on-chain accounts -- they exist solely to give each VaultAmm instance a unique key.
 - **`supports_exact_out`:** Returns `false` for all instances. Integer division in vault conversions loses information, and SOL pool exact-out would require iterative solving.
 - **No network calls:** All methods (`quote`, `get_swap_and_account_metas`, `get_accounts_to_update`) operate on Jupiter-provided account snapshots and constants. Jupiter handles account fetching externally.

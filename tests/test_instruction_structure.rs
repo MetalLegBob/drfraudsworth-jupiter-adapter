@@ -54,7 +54,12 @@ fn buy_crime_has_24_accounts() {
         })
         .unwrap();
 
-    assert_eq!(result.account_metas.len(), 24, "Buy: 20 named + 4 hook");
+    assert_eq!(
+        result.account_metas.len(),
+        25,
+        "Buy (swap_sol_buy_wsol): 21 named + 4 hook"
+    );
+    assert_eq!(result.account_metas[15].pubkey, WSOL_INTERMEDIARY_PDA);
 }
 
 #[test]
@@ -80,7 +85,7 @@ fn buy_fraud_has_24_accounts() {
         })
         .unwrap();
 
-    assert_eq!(result.account_metas.len(), 24);
+    assert_eq!(result.account_metas.len(), 25);
 }
 
 // =============================================================================
@@ -257,7 +262,7 @@ fn buy_epoch_state_is_readonly() {
 }
 
 #[test]
-fn buy_swap_authority_is_readonly() {
+fn buy_swap_authority_is_writable() {
     let amm = crime_amm();
     let jup_id = Pubkey::new_unique();
 
@@ -281,8 +286,8 @@ fn buy_swap_authority_is_readonly() {
 
     assert_eq!(result.account_metas[2].pubkey, SWAP_AUTHORITY_PDA);
     assert!(
-        !result.account_metas[2].is_writable,
-        "Buy: swap_authority should be readonly"
+        result.account_metas[2].is_writable,
+        "Buy (swap_sol_buy_wsol): swap_authority receives the unwrapped tax"
     );
 }
 
@@ -426,13 +431,13 @@ fn buy_hook_accounts_are_last_4() {
         .unwrap();
 
     // Last 4 accounts are hook accounts
-    // [20] = CRIME_HOOK_META
-    assert_eq!(result.account_metas[20].pubkey, CRIME_HOOK_META);
-    // [23] = TRANSFER_HOOK_PROGRAM_ID
-    assert_eq!(result.account_metas[23].pubkey, TRANSFER_HOOK_PROGRAM_ID);
+    // [21] = CRIME_HOOK_META
+    assert_eq!(result.account_metas[21].pubkey, CRIME_HOOK_META);
+    // [24] = TRANSFER_HOOK_PROGRAM_ID
+    assert_eq!(result.account_metas[24].pubkey, TRANSFER_HOOK_PROGRAM_ID);
 
     // All hook accounts should be readonly
-    for i in 20..24 {
+    for i in 21..25 {
         assert!(!result.account_metas[i].is_writable);
         assert!(!result.account_metas[i].is_signer);
     }

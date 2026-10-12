@@ -2,6 +2,20 @@
 
 All notable changes to this crate are recorded here.
 
+## [Unreleased]
+
+Requires the Tax program upgrade that adds `swap_sol_buy_wsol` and removes the
+protocol minimum-output floor. Do not release before that upgrade is live.
+
+### Changed
+
+- SOL buys now route through `swap_sol_buy_wsol`: the whole input, tax
+  included, is debited from the WSOL source account (25 account metas, same
+  order as `swap_sol_sell`, 24-byte payload without `is_crime`). The legacy
+  native-tax `swap_sol_buy` lane stays encodable but is never selected.
+- Documented that `minimum_output` has no protocol floor; intermediate route
+  legs may pass `0`.
+
 ## [0.2.0] - 2026-09-24
 
 ### Added

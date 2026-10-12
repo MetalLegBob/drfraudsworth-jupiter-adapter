@@ -3,6 +3,8 @@
 // These match the EXACT account ordering of:
 // - SwapSolBuy struct (20 named accounts) in programs/tax-program/src/instructions/swap_sol_buy.rs
 // - SwapSolSell struct (21 named accounts) in programs/tax-program/src/instructions/swap_sol_sell.rs
+// - SwapSolBuyWsol struct (21 named accounts, SwapSolSell order) in
+//   programs/tax-program/src/instructions/swap_sol_buy_wsol.rs
 //
 // After the named accounts, transfer hook remaining_accounts are appended
 // (4 per T22 mint) for the token side.
@@ -145,6 +147,41 @@ pub fn build_sell_account_metas_generic(
     pool_key: &Pubkey,
     pool: &ParsedPoolState,
 ) -> Result<Vec<AccountMeta>> {
+    build_wsol_intermediary_metas(user, user_token_ata, user_sol_ata, pool_key, pool, false)
+}
+
+/// Build the 21-account list for SwapSolBuyWsol (SOL -> token, tax paid from
+/// WSOL) from parsed pool state, plus 4 transfer hook accounts for the T22
+/// token mint. Total: 25 AccountMetas.
+///
+/// The on-chain struct shares SwapSolSell's account order (both carry the
+/// WSOL intermediary); only the hooked transfer direction differs.
+///
+/// # Arguments
+/// * `user` - User wallet (signer); authority over `user_sol_ata`
+/// * `user_sol_ata` - User's WSOL token account (input, pays tax + swap)
+/// * `user_token_ata` - User's token account for the pool's token side (output)
+/// * `pool_key` - Pool PDA address
+/// * `pool` - Parsed pool state (mints, vaults, orientation)
+pub fn build_buy_wsol_account_metas_generic(
+    user: &Pubkey,
+    user_sol_ata: &Pubkey,
+    user_token_ata: &Pubkey,
+    pool_key: &Pubkey,
+    pool: &ParsedPoolState,
+) -> Result<Vec<AccountMeta>> {
+    build_wsol_intermediary_metas(user, user_token_ata, user_sol_ata, pool_key, pool, true)
+}
+
+/// Shared layout for the two WSOL-intermediary lanes (sell and WSOL buy).
+fn build_wsol_intermediary_metas(
+    user: &Pubkey,
+    user_token_ata: &Pubkey,
+    user_sol_ata: &Pubkey,
+    pool_key: &Pubkey,
+    pool: &ParsedPoolState,
+    is_buy: bool,
+) -> Result<Vec<AccountMeta>> {
     let sides = resolve_sides(pool)?;
 
     let (user_ata_a, user_ata_b) = if sides.token_on_a {
@@ -159,7 +196,7 @@ pub fn build_sell_account_metas_generic(
         AccountMeta::new(*user, true),
         // 2. epoch_state (readonly)
         AccountMeta::new_readonly(EPOCH_STATE_PDA, false),
-        // 3. swap_authority (mut for sell -- receives lamports from close_account)
+        // 3. swap_authority (mut -- receives lamports from close_account)
         AccountMeta::new(SWAP_AUTHORITY_PDA, false),
         // 4. tax_authority (readonly)
         AccountMeta::new_readonly(TAX_AUTHORITY_PDA, false),
@@ -185,7 +222,7 @@ pub fn build_sell_account_metas_generic(
         AccountMeta::new(CARNAGE_SOL_VAULT_PDA, false),
         // 15. treasury (mut)
         AccountMeta::new(TREASURY, false),
-        // 16. wsol_intermediary (mut) -- EXTRA account in sell struct
+        // 16. wsol_intermediary (mut) -- EXTRA account vs legacy SwapSolBuy
         AccountMeta::new(WSOL_INTERMEDIARY_PDA, false),
         // 17. amm_program (readonly)
         AccountMeta::new_readonly(AMM_PROGRAM_ID, false),
@@ -199,9 +236,13 @@ pub fn build_sell_account_metas_generic(
         AccountMeta::new_readonly(STAKING_PROGRAM_ID, false),
     ];
 
-    // Transfer hook accounts for the T22 token side. For sell (token -> SOL),
-    // the hooked transfer is user_token_ata -> token_vault.
-    let hook_metas = hook_metas_for_mint(&sides.token_mint, user_token_ata, &sides.token_vault);
+    // Transfer hook accounts for the T22 token side. Buy: the hooked transfer
+    // is token_vault -> user_token_ata. Sell: user_token_ata -> token_vault.
+    let hook_metas = if is_buy {
+        hook_metas_for_mint(&sides.token_mint, &sides.token_vault, user_token_ata)
+    } else {
+        hook_metas_for_mint(&sides.token_mint, user_token_ata, &sides.token_vault)
+    };
     metas.extend(hook_metas);
 
     Ok(metas)
@@ -249,6 +290,25 @@ pub fn build_buy_account_metas(
 ) -> Vec<AccountMeta> {
     let (pool_key, pool) = known_pool_state(is_crime);
     build_buy_account_metas_generic(user, user_wsol_ata, user_token_ata, &pool_key, &pool)
+        .expect("known pools are valid SOL pools")
+}
+
+/// Build the WSOL-tax buy account list for a known mainnet pool
+/// (constant-based API).
+///
+/// # Arguments
+/// * `user` - User wallet (signer); authority over `user_wsol_ata`
+/// * `user_wsol_ata` - User's WSOL token account (pays tax + swap)
+/// * `user_token_ata` - User's CRIME/FRAUD token account
+/// * `is_crime` - true = CRIME pool, false = FRAUD pool
+pub fn build_buy_wsol_account_metas(
+    user: &Pubkey,
+    user_wsol_ata: &Pubkey,
+    user_token_ata: &Pubkey,
+    is_crime: bool,
+) -> Vec<AccountMeta> {
+    let (pool_key, pool) = known_pool_state(is_crime);
+    build_buy_wsol_account_metas_generic(user, user_wsol_ata, user_token_ata, &pool_key, &pool)
         .expect("known pools are valid SOL pools")
 }
 

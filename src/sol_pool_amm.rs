@@ -25,7 +25,8 @@ use crate::accounts::addresses::{
     SPL_TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID,
 };
 use crate::accounts::sol_pool_accounts::{
-    build_buy_account_metas_generic, build_sell_account_metas_generic, known_pool_state,
+    build_buy_account_metas_generic, build_buy_wsol_account_metas_generic,
+    build_sell_account_metas_generic, known_pool_state,
 };
 use crate::accounts::spl_pool_accounts::{
     build_buy_account_metas_generic as build_spl_buy_account_metas_generic,
@@ -340,8 +341,18 @@ impl Amm for SolPoolAmm {
         .ok_or_else(|| anyhow!("FactionPoolAmm: unsupported swap mint pair"))?;
 
         let account_metas = match lane {
+            TaxSwapLane::SolBuyWsol => {
+                // Buy: source = WSOL (pays tax + swap), destination = token
+                build_buy_wsol_account_metas_generic(
+                    &swap_params.token_transfer_authority,
+                    &swap_params.source_token_account,
+                    &swap_params.destination_token_account,
+                    &self.key,
+                    &self.pool,
+                )?
+            }
             TaxSwapLane::SolBuy => {
-                // Buy: source = WSOL, destination = token
+                // Legacy native-tax buy; for_mints never selects it.
                 build_buy_account_metas_generic(
                     &swap_params.token_transfer_authority,
                     &swap_params.source_token_account,
