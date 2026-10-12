@@ -37,8 +37,8 @@ pub fn build_vault_account_metas(
     let vault_output = vault_token_account(output_mint);
 
     let mut metas = vec![
-        // 1. user (signer)
-        AccountMeta::new(*user, true),
+        // 1. user (read-only signer; Convert.user is not mut)
+        AccountMeta::new_readonly(*user, true),
         // 2. vault_config (readonly)
         AccountMeta::new_readonly(VAULT_CONFIG_PDA, false),
         // 3. user_input_account (mut)

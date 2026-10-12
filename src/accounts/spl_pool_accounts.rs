@@ -101,7 +101,7 @@ pub fn build_buy_account_metas_generic(
     };
 
     let mut metas = vec![
-        AccountMeta::new(*user, true),
+        AccountMeta::new_readonly(*user, true), // read-only signer (token transfers only)
         AccountMeta::new_readonly(EPOCH_STATE_PDA, false),
         AccountMeta::new(*pool_key, false),
         AccountMeta::new(pool.vault_a, false),
@@ -143,7 +143,7 @@ pub fn build_sell_account_metas_generic(
     };
 
     let mut metas = vec![
-        AccountMeta::new(*user, true),
+        AccountMeta::new_readonly(*user, true), // read-only signer (token transfers only)
         AccountMeta::new_readonly(EPOCH_STATE_PDA, false),
         AccountMeta::new(*pool_key, false),
         AccountMeta::new(pool.vault_a, false),

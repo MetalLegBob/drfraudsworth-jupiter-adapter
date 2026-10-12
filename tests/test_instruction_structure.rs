@@ -230,7 +230,8 @@ fn buy_user_is_signer_and_writable() {
 
     assert_eq!(result.account_metas[0].pubkey, user);
     assert!(result.account_metas[0].is_signer);
-    assert!(result.account_metas[0].is_writable);
+    // swap_sol_buy_wsol: user is a read-only signer (shared-accounts PDAs).
+    assert!(!result.account_metas[0].is_writable);
 }
 
 #[test]

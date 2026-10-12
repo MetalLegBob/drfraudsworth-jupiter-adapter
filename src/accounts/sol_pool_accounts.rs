@@ -192,8 +192,8 @@ fn build_wsol_intermediary_metas(
     let (token_program_a, token_program_b) = (pool.token_program_a, pool.token_program_b);
 
     let mut metas = vec![
-        // 1. user (signer, mut)
-        AccountMeta::new(*user, true),
+        // 1. user (signer, read-only: both lanes only sign token transfers)
+        AccountMeta::new_readonly(*user, true),
         // 2. epoch_state (readonly)
         AccountMeta::new_readonly(EPOCH_STATE_PDA, false),
         // 3. swap_authority (mut -- receives lamports from close_account)

@@ -15,6 +15,11 @@ protocol minimum-output floor. Do not release before that upgrade is live.
   native-tax `swap_sol_buy` lane stays encodable but is never selected.
 - Documented that `minimum_output` has no protocol floor; intermediate route
   legs may pass `0`.
+- `user` / token-transfer authority is now a read-only signer for
+  `swap_sol_buy_wsol`, `swap_sol_sell`, both SPL lanes and vault `convert_v2`
+  (none of them debit its lamports), so shared-accounts program authorities
+  are never write-locked. Requires the same Tax upgrade for `swap_sol_sell`
+  and the SPL lanes.
 
 ## [0.2.0] - 2026-09-24
 

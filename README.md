@@ -168,7 +168,7 @@ Each instruction type requires a specific set of accounts. Pool-specific account
 
 21 named accounts + 4 transfer hook accounts = **25 total**
 
-Named accounts: user, epoch_state, swap_authority (writable), tax_authority, pool, pool_vault_a, pool_vault_b, mint_a (WSOL), mint_b (token), user_token_a, user_token_b, stake_pool, staking_escrow, carnage_vault, treasury, wsol_intermediary, amm_program, token_program_a (SPL Token), token_program_b (Token-2022), system_program, staking_program.
+Named accounts: user (read-only signer), epoch_state, swap_authority (writable), tax_authority, pool, pool_vault_a, pool_vault_b, mint_a (WSOL), mint_b (token), user_token_a, user_token_b, stake_pool, staking_escrow, carnage_vault, treasury, wsol_intermediary, amm_program, token_program_a (SPL Token), token_program_b (Token-2022), system_program, staking_program.
 
 The full `amount_in` is debited from `user_token_a` (WSOL). The tax portion is
 moved to the protocol's `wsol_intermediary`, unwrapped and distributed inside
