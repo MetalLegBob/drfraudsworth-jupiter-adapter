@@ -2,10 +2,10 @@
 
 All notable changes to this crate are recorded here.
 
-## [Unreleased]
+## [0.3.0] - 2026-10-12
 
-Requires the Tax program upgrade that adds `swap_sol_buy_wsol` and removes the
-protocol minimum-output floor. Do not release before that upgrade is live.
+Matches the Tax program upgrade executed on mainnet 2026-10-12 (Squads #104,
+executable sha256 `16ff6dc04b27249c967be0bb77f5b794b53e522f75ecf346d68e18dfb0ab7654`).
 
 ### Changed
 
@@ -20,6 +20,7 @@ protocol minimum-output floor. Do not release before that upgrade is live.
   (none of them debit its lamports), so shared-accounts program authorities
   are never write-locked. Requires the same Tax upgrade for `swap_sol_sell`
   and the SPL lanes.
+- `idl/tax_program.json` synchronized with the upgraded program.
 - `swap_sol_sell` destinations no longer need to be controlled by the signer
   (the Tax upgrade routes the gross output through the protocol intermediary
   and forwards the net). Account layout unchanged.
